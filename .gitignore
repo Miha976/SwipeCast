@@ -1,0 +1,6 @@
+node_modules/
+app/dist/
+app/release/
+app/android/app/build/
+app/android/.gradle/
+*.log

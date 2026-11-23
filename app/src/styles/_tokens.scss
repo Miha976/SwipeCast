@@ -1,0 +1,23 @@
+// Jetons de design SCSS (complètent la config Tailwind)
+$radius-lg: 1.25rem;
+$radius-xl: 1.75rem;
+$gradient-brand: linear-gradient(135deg, #6d5efc 0%, #22d3ee 100%);
+$tap-min: 3rem; // cible tactile minimale (48 px)
+
+@mixin glass($alpha: 0.72) {
+  background: rgba(20, 26, 46, $alpha);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+
+@mixin focus-ring {
+  &:focus-visible {
+    outline: 3px solid #8b7fff;
+    outline-offset: 2px;
+  }
+}
+
+@mixin safe-area-padding {
+  padding-top: max(1rem, env(safe-area-inset-top));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}

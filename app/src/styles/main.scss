@@ -1,0 +1,113 @@
+@use 'tokens' as *;
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    @apply h-full bg-ink-950 text-ink-200 antialiased;
+  }
+  body {
+    @apply font-sans text-base;
+    -webkit-tap-highlight-color: transparent;
+    background-image:
+      radial-gradient(60rem 30rem at 110% -10%, rgba(109, 94, 252, 0.18), transparent 60%),
+      radial-gradient(40rem 25rem at -20% 110%, rgba(34, 211, 238, 0.1), transparent 60%);
+    background-attachment: fixed;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-semibold tracking-tight text-white;
+  }
+}
+
+@layer components {
+  .app-shell {
+    @apply mx-auto flex min-h-full w-full max-w-3xl flex-col gap-5 px-4 sm:px-6 lg:max-w-5xl;
+    @include safe-area-padding;
+  }
+
+  .card {
+    @apply rounded-[1.25rem] border border-white/5 p-5 shadow-lg sm:p-6;
+    @include glass;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 font-semibold
+      transition active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-40;
+    min-height: $tap-min;
+    @include focus-ring;
+
+    &-primary {
+      @apply text-white shadow-glow;
+      background: $gradient-brand;
+      &:hover:not(:disabled) {
+        filter: brightness(1.08);
+      }
+    }
+    &-ghost {
+      @apply bg-white/5 text-ink-200 hover:bg-white/10;
+    }
+    &-danger {
+      @apply bg-bad/15 text-bad hover:bg-bad/25;
+    }
+    &-icon {
+      @apply h-12 w-12 px-0 text-xl;
+    }
+  }
+
+  .input {
+    @apply w-full rounded-2xl border border-white/10 bg-ink-900 px-4 text-lg text-white
+      placeholder:text-ink-400 focus:border-brand-soft focus:outline-none;
+    min-height: $tap-min + 0.5rem;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium uppercase tracking-wider text-ink-400;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold;
+    &-ok {
+      @apply bg-ok/15 text-ok;
+    }
+    &-warn {
+      @apply bg-warn/15 text-warn;
+    }
+    &-bad {
+      @apply bg-bad/15 text-bad;
+    }
+  }
+
+  .progress-track {
+    @apply h-2 w-full overflow-hidden rounded-full bg-white/10;
+    > span {
+      @apply block h-full rounded-full;
+      background: $gradient-brand;
+    }
+  }
+
+  .text-gradient {
+    background: $gradient-brand;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .sheet {
+    @apply fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-xl animate-sheet-up rounded-t-[1.75rem]
+      border border-white/10 p-6 sm:bottom-6 sm:rounded-[1.75rem];
+    background: #141a2e;
+    box-shadow: 0 -20px 60px rgba(0, 0, 0, .5);
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+
+  .browser-bar {
+    @apply flex h-16 items-center gap-2 border-b border-white/5 px-3;
+    @include glass(0.9);
+  }
+}

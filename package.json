@@ -1,0 +1,19 @@
+{
+  "name": "swipecast",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Basculer une vidéo en cours entre téléphone Android et PC Windows, sans perdre la progression.",
+  "workspaces": [
+    "server",
+    "app"
+  ],
+  "scripts": {
+    "server": "npm run start -w server",
+    "test": "npm run test -w server",
+    "dev:web": "npm run dev -w app",
+    "dev:desktop": "npm run electron:dev -w app",
+    "build": "npm run build -w app",
+    "android": "npm run android -w app",
+    "dist:win": "npm run electron:dist -w app"
+  }
+}
