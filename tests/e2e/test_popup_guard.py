@@ -73,7 +73,11 @@ with sync_playwright() as p:
 
     check('window.open même site → bloqué aussi (vecteur du tab-under)', page.evaluate("window.open('/episode-2')") is None)
 
-    check('window.open depuis l’iframe du lecteur → bloqué', frame.evaluate("window.open('http://player.test/other')") is None)
+    n_if = len(popups)
+    frame.evaluate("window.__w = window.open('http://player.test/other')")
+    page.wait_for_timeout(300)
+    check('window.open depuis l’iframe du lecteur → réussit (fermé côté natif)', frame.evaluate("!!window.__w") and len(popups) == n_if + 1)
+    for pg in popups[n_if:]: pg.close()
 
     n1 = len(popups)
     frame.click('#overlay'); page.wait_for_timeout(500)
@@ -104,6 +108,29 @@ with sync_playwright() as p:
     check('régie inconnue : redirection annulée', page2.url == 'http://anime.test/ep2', page2.url)
     check('régie inconnue : page NON rechargée (lecture conservée)', page2.evaluate("window.__marker") == 'vivant')
     check('régie inconnue : redirection signalée', any(m['type'] == 'redirect-blocked' for m in page2.evaluate("window.__m")))
+
+    # --- scénario Vidmoly : calque invisible dans l'iframe du lecteur (autre domaine)
+    VIDMOLY = '''<!doctype html><body style="margin:0;position:relative">
+<video id="vid" width="300" height="150" style="background:#222"></video>
+<div id="calque" style="position:absolute;inset:0;opacity:0;z-index:9"></div>
+<script>document.getElementById('calque').addEventListener('click',function(){
+  var w = window.open('http://pub.vidmoly-ads.test/promo');
+  if (!w) top.location.href = 'http://pub.vidmoly-ads.test/plan-b';
+  this.remove();
+});</script></body>'''
+    EP3 = '''<!doctype html><body><h1>episode 3</h1><script>window.__marker='vivant'</script>
+<iframe id="playerDF" src="http://ansembed.test/embed-x.html" width="320" height="170"></iframe></body>'''
+    page3 = ctx.new_page(); page3.set_default_timeout(8000)
+    page3.route('http://anime.test/ep3', lambda r: r.fulfill(status=200, content_type='text/html', body=EP3))
+    page3.route('http://ansembed.test/**', lambda r: r.fulfill(status=200, content_type='text/html', body=VIDMOLY))
+    page3.goto('http://anime.test/ep3'); page3.wait_for_timeout(400)
+    n3 = len(popups)
+    page3.frame(url=lambda u: 'ansembed.test' in u).click('#calque'); page3.wait_for_timeout(700)
+    check('Vidmoly : pas de plan B, la page de l’épisode reste', page3.url == 'http://anime.test/ep3', page3.url)
+    check('Vidmoly : page NON rechargée', page3.evaluate("window.__marker") == 'vivant')
+    check('Vidmoly : la popup est ouverte (fermée ensuite côté natif, comme un onglet Brave)', len(popups) == n3 + 1)
+    check('Vidmoly : calque retiré, le clic suivant atteint la vidéo', page3.frame(url=lambda u: 'ansembed.test' in u).evaluate("!document.getElementById('calque')"))
+
     page2.click('#out'); page2.wait_for_timeout(500)
     check('vrai clic sur un lien externe → navigation autorisée', page2.url == 'http://other.test/page', page2.url)
     page2.go_back(); page2.wait_for_timeout(500)

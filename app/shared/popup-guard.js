@@ -8,8 +8,12 @@
  * passe sur PC où Electron refuse toutes les fenêtres).
  *
  * Règles :
- *  - window.open est TOUJOURS bloqué, y compris vers le même site : le tab-under ouvre justement
- *    la page courante. (Même politique que sur PC, où Electron refuse toutes les fenêtres.)
+ *  - window.open dans la PAGE PRINCIPALE : toujours bloqué (null), même vers le même site, car le
+ *    tab-under ouvre justement la page courante.
+ *  - window.open dans une IFRAME (lecteur Vidmoly & co) : on le laisse RÉUSSIR, comme Brave qui ouvre
+ *    un onglet. Le plugin ouvre la fenêtre cachée (hiddenPopupWindow) et l'app la ferme aussitôt.
+ *    Renvoyer null y serait contre-productif : ces scripts ont un plan B `if (!w) top.location = pub`
+ *    lancé depuis une iframe d'un autre domaine, que la Navigation API ne peut pas annuler.
  *  - liens <a target=_blank> : autorisés vers le même site depuis la page principale, bloqués sinon
  *    (un lien ne rend pas de référence de fenêtre au script : pas de tab-under possible).
  *  - liens target=_top depuis une iframe : autorisés seulement vers le site hôte.
@@ -35,6 +39,7 @@
     /* liste non injectée */
   }
   var IS_TOP = window.top === window;
+  var nativeOpen = window.open;
   var lastReport = 0;
 
   function baseDomain(host) {
@@ -200,6 +205,14 @@
   }
 
   function guardedOpen(url) {
+    if (!IS_TOP) {
+      // vraie fenêtre (cachée puis fermée côté natif) : le script pub ne déclenche pas son plan B
+      try {
+        return nativeOpen.apply(window, arguments);
+      } catch (e) {
+        return null;
+      }
+    }
     report(url);
     return null;
   }

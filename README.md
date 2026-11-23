@@ -95,7 +95,7 @@ pip install playwright && npm run build
 python3 tests/e2e/test_tracker.py <dossier avec page.html + clip.webm> app/shared/tracker.js   # 13 vérifications
 python3 tests/e2e/test_e2e.py                                     # appairage UI + synchro + transfert (6 vérifications)
 python3 tests/e2e/test_feedback.py <dossier> app/shared/tracker.js  # Trusted Types, pubs YouTube, DOM réécrit (7 vérifications)
-python3 tests/e2e/test_popup_guard.py app/shared/popup-guard.js  # onclicka, régie inconnue, tab-under, calques, liens _top (23 vérifications)
+python3 tests/e2e/test_popup_guard.py app/shared/popup-guard.js  # onclicka, régie inconnue, calque Vidmoly, tab-under, liens _top (27 vérifications)
 npm run test:unit                                                 # NavigationGuard (13) + position dans l'URL (8)
 ```
 
