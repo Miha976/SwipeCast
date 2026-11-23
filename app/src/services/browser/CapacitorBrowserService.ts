@@ -5,6 +5,7 @@ import type { BrowsingState, RestoreOptions, TrackerMessage } from '../../models
 import { AD_HOSTS, isSameSite } from '../../models/adBlock';
 import { restoreCall, type BrowserService, type PopupBlocked } from './BrowserService';
 import trackerSource from '../../../shared/tracker.js?raw';
+import popupGuardSource from '../../../shared/popup-guard.js?raw';
 
 type Events = { message: TrackerMessage; state: BrowsingState | null; popup: PopupBlocked };
 
@@ -26,6 +27,11 @@ export class CapacitorBrowserService extends Emitter<Events> implements BrowserS
     b.toString(16).padStart(2, '0'),
   ).join('');
   private readonly tracker = trackerSource.replace('__SWIPECAST_NONCE__', this.nonce);
+  private readonly popupGuard = popupGuardSource.replace('__SWIPECAST_NONCE__', this.nonce);
+  /** Filet de sécurité "tab-under" : popup puis remplacement de la page principale par la pub. */
+  private lastPopupAt = 0;
+  private lastProgress: { url: string; time: number } | null = null;
+  private lastToastAt = 0;
 
   /** Événement provenant de la vue principale ? (sans id = ancienne version du plugin → on accepte) */
   private isMain(id?: string): boolean {
@@ -48,7 +54,10 @@ export class CapacitorBrowserService extends Emitter<Events> implements BrowserS
       toolbarType: ToolBarType.NAVIGATION,
       showReloadButton: true,
       activeNativeNavigationForWebview: true,
-      hiddenPopupWindow: true, // les popups ne s'affichent jamais d'elles-mêmes
+      hiddenPopupWindow: true, // les popups qui passeraient malgré tout ne s'affichent jamais
+      // window.open neutralisé avant tout script de la page, dans toutes les frames (iframe du lecteur comprise)
+      preShowScript: this.popupGuard,
+      preShowScriptInjectionTime: 'documentStart',
       blockedHosts: AD_HOSTS.flatMap((h) => [h, `*.${h}`]), // navigations vers les régies pub
     });
     this.webviewId = id;
@@ -63,14 +72,26 @@ export class CapacitorBrowserService extends Emitter<Events> implements BrowserS
       }),
       await InAppBrowser.addListener('urlChangeEvent', (e) => {
         if (!this.isMain(e.id)) return;
+        const previous = this.current.url;
+        if (Date.now() - this.lastPopupAt < 3000 && previous && !isSameSite(e.url, previous)) {
+          // la page principale vient d'être remplacée par une pub juste après une popup → on revient
+          this.lastPopupAt = 0;
+          void this.recoverFromTabUnder(previous);
+          return;
+        }
         this.current = { ...this.current, url: e.url, canGoBack: true };
         this.emit('state', this.current);
       }),
       await InAppBrowser.addListener('messageFromWebview', (e) => {
         const msg = e.detail as TrackerMessage & { nonce?: string };
         if (msg?.nonce !== this.nonce) return; // message forgé par la page (ou venant d'une popup)
+        if ((msg as { type: string }).type === 'popup-blocked') {
+          this.notifyBlocked((msg as unknown as { url?: string }).url ?? null);
+          return;
+        }
         if (msg.type === 'progress' && msg.isTop) {
           this.current = { ...this.current, title: msg.title, url: msg.url };
+          if (msg.hasVideo) this.lastProgress = { url: msg.url, time: msg.currentTime };
         }
         this.emit('message', msg);
       }),
@@ -91,9 +112,29 @@ export class CapacitorBrowserService extends Emitter<Events> implements BrowserS
       await InAppBrowser.show({ id }).catch(() => undefined);
       return;
     }
+    // une popup a échappé au garde-fou (ouverture native) : on la ferme et on surveille un éventuel tab-under
+    this.lastPopupAt = Date.now();
     await InAppBrowser.close({ id }).catch(() => undefined);
+    this.notifyBlocked(url ?? null);
+  }
+
+  private notifyBlocked(url: string | null): void {
     this.emit('popup', { url: url && /^https?:/i.test(url) ? url : null });
-    void this.toast('🚫 Popup publicitaire bloquée');
+    if (Date.now() - this.lastToastAt > 4000) {
+      this.lastToastAt = Date.now();
+      void this.toast('🚫 Popup publicitaire bloquée');
+    }
+  }
+
+  /** Recharge la page d'origine et reprend la vidéo là où elle en était. */
+  private async recoverFromTabUnder(previousUrl: string): Promise<void> {
+    if (!this.webviewId) return;
+    const p = this.lastProgress;
+    if (p && p.url === previousUrl && p.time > 0) {
+      this.pendingRestore = { time: p.time, fullscreen: false, autoplay: true };
+    }
+    await InAppBrowser.setUrl({ url: previousUrl, id: this.webviewId }).catch(() => undefined);
+    this.notifyBlocked(null);
   }
 
   private async injectAndRestore(): Promise<void> {

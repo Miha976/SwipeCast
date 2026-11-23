@@ -39,6 +39,20 @@ function isAdHost(hostname) {
   return AD_HOSTS.some((d) => h === d || h.endsWith('.' + d));
 }
 
+function baseDomain(host) {
+  const p = String(host || '').toLowerCase().split('.');
+  const twoLevel = p.length > 2 && /^(co|com|org|net|gov|ac|edu)$/.test(p[p.length - 2]);
+  return p.slice(twoLevel ? -3 : -2).join('.');
+}
+
+function sameSite(a, b) {
+  try {
+    return baseDomain(new URL(a).hostname) === baseDomain(new URL(b).hostname);
+  } catch {
+    return false;
+  }
+}
+
 let adBlockInstalled = false;
 /** Bloque requêtes ET navigations vers les régies pub, pour toute la session du navigateur intégré. */
 function installAdBlock() {
@@ -234,6 +248,17 @@ function ensureView() {
     htmlFullscreen = false;
     win?.setFullScreen(false);
     layout();
+  });
+
+  // Une iframe (lecteur) qui tente de remplacer toute la page par un autre site (lien target=_top,
+  // top.location = …) : navigation annulée. Les liens cliqués dans la page elle-même ne sont pas concernés.
+  wc.on('will-navigate', (details) => {
+    const ini = details.initiator;
+    if (!details.isMainFrame || !ini) return;
+    const fromMain = ini.processId === wc.mainFrame.processId && ini.routingId === wc.mainFrame.routingId;
+    if (fromMain || sameSite(details.url, wc.getURL())) return;
+    details.preventDefault();
+    win?.webContents.send('sc:popup-blocked', { url: null });
   });
 
   // Toutes les popups sont refusées (c'est le vecteur principal des pubs sur les sites de streaming).

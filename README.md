@@ -78,7 +78,9 @@ Le script est compatible **Trusted Types** (CSP de YouTube) : aucune affectation
 
 ## Blocage des pubs
 
-- **Popups** : refusées sur les deux plateformes. Android ouvre chaque popup en mode caché (`hiddenPopupWindow`) puis la ferme, sauf si elle reste sur le même site (connexion, lecteur). Sur PC, la barre affiche « Popup bloquée · Ouvrir quand même ».
+- **Popups / tab-under** : le piège des sites de streaming est le *tab-under* (le script ouvre l'épisode dans une nouvelle fenêtre puis remplace la page par la pub avec `location.replace`, ce qui efface l'épisode de l'historique).
+  - PC : Electron refuse toutes les fenêtres (`window.open` → `null`, le script abandonne), et une iframe ne peut plus remplacer la page par un autre site (`will-navigate` + `initiator`). La barre affiche « Popup bloquée · Ouvrir quand même ».
+  - Android : `shared/popup-guard.js` est injecté **au début du document dans toutes les frames** (`preShowScriptInjectionTime: 'documentStart'` → `addDocumentStartJavaScript`). Il neutralise `window.open` (non réécrivable par la page) et bloque les calques `<a target=_blank>` et les liens `_top` vers d'autres sites. En dernier recours, les popups natives restantes sont ouvertes cachées puis fermées. Si la page principale change de site dans les 3 s qui suivent, on recharge l'épisode à la même position.
 - **Régies publicitaires** (`shared/ad-hosts.json`) : bloquées pour toutes les requêtes sur PC (`webRequest`), et pour les navigations sur Android (`blockedHosts`). La liste est à compléter au fil de l'eau.
 
 ## Tests
@@ -89,6 +91,7 @@ pip install playwright && npm run build
 python3 tests/e2e/test_tracker.py <dossier avec page.html + clip.webm> app/shared/tracker.js   # 13 vérifications
 python3 tests/e2e/test_e2e.py                                     # appairage UI + synchro + transfert (6 vérifications)
 python3 tests/e2e/test_feedback.py <dossier> app/shared/tracker.js  # Trusted Types, pubs YouTube, DOM réécrit (7 vérifications)
+python3 tests/e2e/test_popup_guard.py app/shared/popup-guard.js  # tab-under, calques, liens _top (10 vérifications)
 node --experimental-strip-types tests/unit/siteAdapters.test.ts   # position dans l'URL (8 vérifications)
 ```
 
