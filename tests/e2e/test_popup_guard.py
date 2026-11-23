@@ -90,5 +90,23 @@ with sync_playwright() as p:
 
     frame.click('#tophost'); page.wait_for_timeout(600)
     check('lien _top de l’iframe vers le site hôte → autorisé', page.url == 'http://anime.test/next', page.url)
+
+    # --- régie INCONNUE (hors liste) : redirection annulée avant de partir, sans rechargement
+    UNKNOWN = '''<!doctype html><html><body><h1>episode 2</h1>
+<button id="play2" style="width:120px;height:40px">play</button>
+<a id="out" href="http://other.test/page" style="display:block;width:200px;height:30px">lien externe</a>
+<script>window.__marker='vivant';document.getElementById('play2').addEventListener('click',function(){location.replace('http://nouveau-casino.test/x')});</script>
+</body></html>'''
+    page2 = ctx.new_page(); page2.set_default_timeout(8000)
+    page2.route('http://anime.test/ep2', lambda r: r.fulfill(status=200, content_type='text/html', body=UNKNOWN))
+    page2.goto('http://anime.test/ep2'); page2.wait_for_timeout(300)
+    page2.click('#play2'); page2.wait_for_timeout(600)
+    check('régie inconnue : redirection annulée', page2.url == 'http://anime.test/ep2', page2.url)
+    check('régie inconnue : page NON rechargée (lecture conservée)', page2.evaluate("window.__marker") == 'vivant')
+    check('régie inconnue : redirection signalée', any(m['type'] == 'redirect-blocked' for m in page2.evaluate("window.__m")))
+    page2.click('#out'); page2.wait_for_timeout(500)
+    check('vrai clic sur un lien externe → navigation autorisée', page2.url == 'http://other.test/page', page2.url)
+    page2.go_back(); page2.wait_for_timeout(500)
+    check('geste retour → autorisé', page2.url == 'http://anime.test/ep2', page2.url)
     b.close()
 print(f"{sum(ok)}/{len(ok)} OK"); sys.exit(0 if all(ok) else 1)

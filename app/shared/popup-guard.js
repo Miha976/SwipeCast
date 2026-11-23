@@ -16,6 +16,8 @@
  *  - scripts / iframes / requêtes vers les régies connues (__SWIPECAST_AD_HOSTS__) : jamais exécutés.
  *    Balises du HTML : MutationObserver qui change leur type avant exécution (technique de « yett »).
  *    Balises ajoutées par script : interception de l'affectation de src.
+ *  - page principale : redirection vers un autre site sans geste de l'utilisateur → annulée avant
+ *    de partir (Navigation API), sans recharger la page.
  *  - page principale : signale les VRAIS clics (isTrusted) sur des liens → « intention de navigation ».
  *    Côté natif, un changement de site sans intention récente = redirection pub → annulée (NavigationGuard).
  * Aucune dépendance, ES5, compatible Trusted Types (les valeurs passées aux setters ne sont pas converties).
@@ -160,6 +162,30 @@
 
   // ---------------------------------------------------------------- intentions de navigation
   // Seule la page principale compte : un clic dans l'iframe du lecteur n'est jamais une intention de changer de site.
+  // ---------------------------------------------------------------- redirections : annulées AVANT de partir
+  // Navigation API (Chromium ≥ 102) : l'événement navigate est annulable et indique si l'utilisateur
+  // l'a déclenché (lien touché, formulaire). Une régie qui fait location.replace(pub) depuis un script de
+  // la page (ou d'une iframe du même site, cas d'onclicka sur anime-sama) est stoppée net : la page ne
+  // bouge pas, rien n'est rechargé. Limite de l'API : non émis si l'initiateur est une iframe d'un autre
+  // domaine → filet natif (NavigationGuard, rechargement à la même position).
+  if (IS_TOP && window.navigation && window.navigation.addEventListener) {
+    window.navigation.addEventListener('navigate', function (e) {
+      try {
+        if (!e.cancelable || e.hashChange || e.navigationType === 'traverse' || e.navigationType === 'reload') return;
+        var dest = resolve(e.destination && e.destination.url);
+        if (!dest || !/^https?:$/.test(dest.protocol)) return;
+        var adDest = isAdUrl(dest.href);
+        var otherSite = baseDomain(dest.hostname) !== baseDomain(location.hostname);
+        if (adDest || (otherSite && !e.userInitiated)) {
+          e.preventDefault();
+          send({ type: 'redirect-blocked', url: dest.href });
+        }
+      } catch (err) {
+        /* en cas de doute, on laisse passer */
+      }
+    });
+  }
+
   if (IS_TOP) {
     // Seuls les LIENS comptent (pas les boutons : la régie se déclenche au clic sur le ▶ du site).
     window.addEventListener(

@@ -116,6 +116,11 @@ export class CapacitorBrowserService extends Emitter<Events> implements BrowserS
           this.notifyBlocked((msg as unknown as { url?: string }).url ?? null);
           return;
         }
+        if (kind === 'redirect-blocked') {
+          // annulée dans la page avant de partir : rien à recharger
+          this.notifyBlocked(null, '🚫 Redirection publicitaire bloquée', 0);
+          return;
+        }
         if (kind === 'nav-intent') {
           const url = (msg as unknown as { url?: string }).url;
           if (url) this.navGuard.noteIntent(url);
@@ -150,12 +155,12 @@ export class CapacitorBrowserService extends Emitter<Events> implements BrowserS
     this.notifyBlocked(url ?? null);
   }
 
-  private notifyBlocked(url: string | null, text = '🚫 Popup publicitaire bloquée'): void {
+  private notifyBlocked(url: string | null, text = '🚫 Popup publicitaire bloquée', delayMs = 1500): void {
     this.emit('popup', { url: url && /^https?:/i.test(url) ? url : null });
     if (Date.now() - this.lastToastAt > 4000) {
       this.lastToastAt = Date.now();
       // le toast est affiché par le script de la page : on attend qu'elle soit rechargée
-      setTimeout(() => void this.toast(text), 1500);
+      setTimeout(() => void this.toast(text), delayMs);
     }
   }
 

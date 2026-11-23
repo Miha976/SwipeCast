@@ -83,7 +83,8 @@ Le script est compatible **Trusted Types** (CSP de YouTube) : aucune affectation
   - Android : `shared/popup-guard.js` est injecté **au début du document dans toutes les frames** (`preShowScriptInjectionTime: 'documentStart'` → `addDocumentStartJavaScript`). Il neutralise `window.open` (non réécrivable par la page) et bloque les calques `<a target=_blank>` et les liens `_top` vers d'autres sites. En dernier recours, les popups natives restantes sont ouvertes cachées puis fermées. Si la page principale change de site dans les 3 s qui suivent, on recharge l'épisode à la même position.
 - **Redirections « onclick » (mobile)** : sur téléphone, des régies comme *onclicka* (vue sur anime-sama) ne font pas de popup : au premier clic sur le lecteur, elles **redirigent l'onglet** (`location.replace`, ce qui efface l'épisode de l'historique). Deux protections :
   1. le garde-fou bloque l'exécution des scripts, iframes et requêtes des régies connues (MutationObserver avant exécution pour les balises du HTML, setters `src`/`setAttribute` pour celles ajoutées par script, `fetch`/XHR/`sendBeacon`) ;
-  2. `models/NavigationGuard.ts` : un changement de site de la page principale n'est accepté que vers le site d'un **lien réellement touché** (`isTrusted`), vers l'URL ouverte par l'app, ou vers une page déjà visitée (retour). Sinon, l'épisode est rechargé à la même position avec le message « Redirection publicitaire bloquée ». Un clic sur un bouton ne compte pas (la régie se déclenche justement au clic sur ▶). Limite : une connexion OAuth lancée par un bouton est annulée dans le navigateur intégré.
+  2. **annulation avant départ** (Navigation API, événement `navigate` annulable) : dans la page principale, une navigation vers un autre site sans geste de l'utilisateur (`userInitiated`) est annulée — **la page ne bouge pas, rien n'est rechargé**, quelle que soit la régie. Non émis par Chromium si l'initiateur est une iframe d'un autre domaine, d'où :
+  3. `models/NavigationGuard.ts` (filet natif) : un changement de site de la page principale n'est accepté que vers le site d'un **lien réellement touché** (`isTrusted`), vers l'URL ouverte par l'app, ou vers une page déjà visitée (retour). Sinon, l'épisode est rechargé à la même position avec le message « Redirection publicitaire bloquée ». Un clic sur un bouton ne compte pas (la régie se déclenche justement au clic sur ▶). Limite : une connexion OAuth lancée par un bouton est annulée dans le navigateur intégré.
 - **Régies publicitaires** (`shared/ad-hosts.json`) : bloquées pour toutes les requêtes sur PC (`webRequest`), et pour les navigations sur Android (`blockedHosts`). La liste est à compléter au fil de l'eau.
 
 ## Tests
@@ -94,7 +95,7 @@ pip install playwright && npm run build
 python3 tests/e2e/test_tracker.py <dossier avec page.html + clip.webm> app/shared/tracker.js   # 13 vérifications
 python3 tests/e2e/test_e2e.py                                     # appairage UI + synchro + transfert (6 vérifications)
 python3 tests/e2e/test_feedback.py <dossier> app/shared/tracker.js  # Trusted Types, pubs YouTube, DOM réécrit (7 vérifications)
-python3 tests/e2e/test_popup_guard.py app/shared/popup-guard.js  # régie onclicka, tab-under, calques, liens _top (18 vérifications)
+python3 tests/e2e/test_popup_guard.py app/shared/popup-guard.js  # onclicka, régie inconnue, tab-under, calques, liens _top (23 vérifications)
 npm run test:unit                                                 # NavigationGuard (13) + position dans l'URL (8)
 ```
 
