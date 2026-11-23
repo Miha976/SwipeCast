@@ -68,6 +68,19 @@ Fermer la fenêtre réduit l'app dans la zone de notification, pour que le hub r
 - **Recevoir** : une notification apparaît, ou une feuille « Regarder en plein écran » si l'app est ouverte. Elle reprend 3 s avant le point d'envoi (réglable).
 - **Récupérer sans envoi préalable** : la carte « Sur PC-Bureau » affiche la vidéo en cours sur l'autre appareil, avec un bouton « Reprendre ici ».
 
+## Reprise de la position
+
+Deux mécanismes complémentaires :
+1. **Paramètre d'URL** quand le site le permet (`models/siteAdapters.ts`) : YouTube `t=754s` (`start=` pour /embed), Vimeo `#t=`, Dailymotion `start=`. Le lecteur démarre nativement au bon endroit, même après une pub.
+2. **Seek par le script injecté** pour tous les autres sites : réappliqué tant que le lecteur ne l'a pas « tenu » 2 s, et suspendu pendant les pubs YouTube (`.ad-showing`).
+
+Le script est compatible **Trusted Types** (CSP de YouTube) : aucune affectation d'`innerHTML`.
+
+## Blocage des pubs
+
+- **Popups** : refusées sur les deux plateformes. Android ouvre chaque popup en mode caché (`hiddenPopupWindow`) puis la ferme, sauf si elle reste sur le même site (connexion, lecteur). Sur PC, la barre affiche « Popup bloquée · Ouvrir quand même ».
+- **Régies publicitaires** (`shared/ad-hosts.json`) : bloquées pour toutes les requêtes sur PC (`webRequest`), et pour les navigations sur Android (`blockedHosts`). La liste est à compléter au fil de l'eau.
+
 ## Tests
 
 ```bash
@@ -75,6 +88,8 @@ npm test                                                          # hub : appair
 pip install playwright && npm run build
 python3 tests/e2e/test_tracker.py <dossier avec page.html + clip.webm> app/shared/tracker.js   # 13 vérifications
 python3 tests/e2e/test_e2e.py                                     # appairage UI + synchro + transfert (6 vérifications)
+python3 tests/e2e/test_feedback.py <dossier> app/shared/tracker.js  # Trusted Types, pubs YouTube, DOM réécrit (7 vérifications)
+node --experimental-strip-types tests/unit/siteAdapters.test.ts   # position dans l'URL (8 vérifications)
 ```
 
 ## Limites connues (v1)
@@ -83,4 +98,5 @@ python3 tests/e2e/test_e2e.py                                     # appairage UI
 2. **DRM (Netflix, Disney+, Prime…)** : Electron standard n'inclut pas Widevine, donc ces sites ne liront pas sur PC. Il faudrait la build [castLabs ECS](https://github.com/castlabs/electron-releases) avec signature VMP. La WebView Android, elle, gère généralement Widevine.
 3. **Iframes sur Android** : le plugin n'injecte que dans la frame principale. Les lecteurs embarqués en iframe cross-origin (certains sites de streaming) sont suivis sur PC (injection dans toutes les frames) mais pas sur Android. Dans ce cas, c'est l'URL de la page qui est transmise, sans la position.
 4. **Même réseau requis** : en 4G ou hors de chez toi, passer par Tailscale (adresse 100.x du PC) fonctionne sans changer le code.
-5. Le trafic LAN n'est pas chiffré (ws://) : seul un jeton protège l'accès. Ça suffit sur un Wi-Fi domestique, pas sur un réseau public.
+5. Sur Android, les pubs **affichées dans** l'iframe du lecteur (overlay, pré-roll) ne sont pas bloquées : `blockedHosts` filtre les navigations, pas chaque requête. Seuls les popups et les redirections sont bloqués.
+6. Le trafic LAN n'est pas chiffré (ws://) : seul un jeton protège l'accès. Ça suffit sur un Wi-Fi domestique, pas sur un réseau public.

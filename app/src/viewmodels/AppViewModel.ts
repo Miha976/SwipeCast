@@ -13,6 +13,7 @@ import type {
 } from '../models/types';
 import { DEFAULT_SETTINGS } from '../models/types';
 import { resumeTime, toNavigableUrl } from '../models/format';
+import { withStartTime } from '../models/siteAdapters';
 import type { Services } from '../services/container';
 import type { SyncStatus } from '../services/SyncService';
 import { StorageKeys } from '../services/StorageService';
@@ -34,6 +35,8 @@ export interface AppState {
   history: HistoryEntry[];
   settings: Settings;
   snackbar: { text: string; tone: 'ok' | 'warn' | 'bad' } | null;
+  /** dernière popup bloquée (affichée dans la barre du navigateur sur PC) */
+  blockedPopup: { url: string | null; count: number } | null;
   view: 'home' | 'pairing';
 }
 
@@ -47,6 +50,7 @@ export class AppViewModel extends ViewModel<AppState> {
   private lastHistorySave = 0;
   private snackTimer: ReturnType<typeof setTimeout> | null = null;
   private initStarted = false;
+  private popupTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private s: Services) {
     super({
@@ -63,6 +67,7 @@ export class AppViewModel extends ViewModel<AppState> {
       history: [],
       settings: DEFAULT_SETTINGS,
       snackbar: null,
+      blockedPopup: null,
       view: 'home',
     });
   }
@@ -82,6 +87,13 @@ export class AppViewModel extends ViewModel<AppState> {
       }),
     );
     this.track(notifications.onOpen((id) => this.openHandoffById(id)));
+    this.track(
+      browser.onPopupBlocked(({ url }) => {
+        if (this.popupTimer) clearTimeout(this.popupTimer);
+        this.setState((st) => ({ blockedPopup: { url, count: (st.blockedPopup?.count ?? 0) + 1 } }));
+        this.popupTimer = setTimeout(() => this.setState({ blockedPopup: null }), 10_000);
+      }),
+    );
 
     await notifications.init().catch((e) => console.warn('notifications', e));
 
@@ -222,8 +234,10 @@ export class AppViewModel extends ViewModel<AppState> {
     const { rewindSeconds, autoFullscreen } = this.state.settings;
     const history = await this.s.history.add({ ...session, kind, peerName });
     this.setState({ history });
-    await this.s.browser.open(session.url, {
-      time: resumeTime(session.currentTime, rewindSeconds),
+    const time = resumeTime(session.currentTime, rewindSeconds);
+    // position encodée dans l'URL quand le site le permet (YouTube t=, Vimeo #t=, Dailymotion start=)
+    await this.s.browser.open(withStartTime(session.url, time), {
+      time,
       fullscreen: autoFullscreen,
       autoplay: true,
     });
@@ -276,6 +290,17 @@ export class AppViewModel extends ViewModel<AppState> {
       peerName: peer.name,
     });
     this.setState({ history });
+  }
+
+  /** L'utilisateur veut quand même voir la popup bloquée (cas légitime). */
+  async openBlockedPopup(): Promise<void> {
+    const url = this.state.blockedPopup?.url;
+    this.setState({ blockedPopup: null });
+    if (url) await this.s.browser.open(url);
+  }
+
+  dismissBlockedPopup(): void {
+    this.setState({ blockedPopup: null });
   }
 
   closeBrowser() {

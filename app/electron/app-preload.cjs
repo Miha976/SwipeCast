@@ -20,5 +20,6 @@ contextBridge.exposeInMainWorld('swipecastDesktop', {
     toast: (text) => ipcRenderer.invoke('sc:browser-toast', text),
     onMessage: (cb) => listen('sc:browser-msg', cb),
     onState: (cb) => listen('sc:browser-state', cb),
+    onPopupBlocked: (cb) => listen('sc:popup-blocked', cb),
   },
 });

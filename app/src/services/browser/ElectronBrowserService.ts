@@ -1,6 +1,6 @@
 import type { BrowsingState, RestoreOptions, TrackerMessage } from '../../models/types';
 import type { DesktopBridge } from '../platform';
-import type { BrowserService } from './BrowserService';
+import type { BrowserService, PopupBlocked } from './BrowserService';
 
 /** Windows : délègue au processus principal Electron (WebContentsView + injection multi-frames). */
 export class ElectronBrowserService implements BrowserService {
@@ -29,5 +29,8 @@ export class ElectronBrowserService implements BrowserService {
   }
   onState(cb: (s: BrowsingState | null) => void) {
     return this.bridge.browser.onState(cb);
+  }
+  onPopupBlocked(cb: (p: PopupBlocked) => void) {
+    return this.bridge.browser.onPopupBlocked(cb);
   }
 }

@@ -20,4 +20,7 @@ export class WebFallbackBrowserService implements BrowserService {
   onState() {
     return () => {};
   }
+  onPopupBlocked() {
+    return () => {};
+  }
 }
