@@ -76,8 +76,8 @@ with sync_playwright() as p:
     n_if = len(popups)
     frame.evaluate("window.__w = window.open('http://player.test/other')")
     page.wait_for_timeout(300)
-    check('window.open depuis l’iframe du lecteur → réussit (fermé côté natif)', frame.evaluate("!!window.__w") and len(popups) == n_if + 1)
-    for pg in popups[n_if:]: pg.close()
+    check('window.open depuis l’iframe → fausse fenêtre crédible, aucune vraie fenêtre',
+          frame.evaluate("!!window.__w && window.__w.closed === false && typeof window.__w.focus === 'function'") and len(popups) == n_if)
 
     n1 = len(popups)
     frame.click('#overlay'); page.wait_for_timeout(500)
@@ -128,8 +128,28 @@ with sync_playwright() as p:
     page3.frame(url=lambda u: 'ansembed.test' in u).click('#calque'); page3.wait_for_timeout(700)
     check('Vidmoly : pas de plan B, la page de l’épisode reste', page3.url == 'http://anime.test/ep3', page3.url)
     check('Vidmoly : page NON rechargée', page3.evaluate("window.__marker") == 'vivant')
-    check('Vidmoly : la popup est ouverte (fermée ensuite côté natif, comme un onglet Brave)', len(popups) == n3 + 1)
+    check('Vidmoly : aucune vraie fenêtre créée (plus de flash blanc)', len(popups) == n3)
     check('Vidmoly : calque retiré, le clic suivant atteint la vidéo', page3.frame(url=lambda u: 'ansembed.test' in u).evaluate("!document.getElementById('calque')"))
+
+    # --- tab-under DANS le lecteur : open() puis l'iframe part elle-même sur la pub
+    LECTEUR2 = '''<!doctype html><body style="margin:0;position:relative"><script>window.__etat='lecture-12:34'</script>
+<video width="300" height="150" style="background:#222"></video>
+<div id="calque2" style="position:absolute;inset:0;opacity:0;z-index:9"></div>
+<script>document.getElementById('calque2').addEventListener('click',function(){
+  var w = window.open(location.href); if (w) location.href = 'http://pub-lecteur.test/x';
+});</script></body>'''
+    EP4 = '<!doctype html><body><iframe id="playerDF" src="http://lecteur2.test/embed" width="320" height="170"></iframe></body>'
+    logs = []
+    page4 = ctx.new_page(); page4.set_default_timeout(8000)
+    page4.on('console', lambda m: logs.append(m.text))
+    page4.route('http://anime.test/ep4', lambda r: r.fulfill(status=200, content_type='text/html', body=EP4))
+    page4.route('http://lecteur2.test/**', lambda r: r.fulfill(status=200, content_type='text/html', body=LECTEUR2))
+    page4.goto('http://anime.test/ep4'); page4.wait_for_timeout(400)
+    page4.frame(url=lambda u: 'lecteur2.test' in u).click('#calque2'); page4.wait_for_timeout(700)
+    f4 = page4.frame(url=lambda u: 'lecteur2.test' in u)
+    check('tab-under dans le lecteur : l’iframe reste sur le lecteur', f4 is not None and f4.url.startswith('http://lecteur2.test/'), f4.url if f4 else None)
+    check('tab-under dans le lecteur : lecteur non remis à zéro', f4 is not None and f4.evaluate("window.__etat") == 'lecture-12:34')
+    check('diagnostic : blocages journalisés [SwipeCast] dans la console', any('[SwipeCast] navigation du lecteur annulée' in l for l in logs), [l for l in logs if 'SwipeCast' in l][:3])
 
     page2.click('#out'); page2.wait_for_timeout(500)
     check('vrai clic sur un lien externe → navigation autorisée', page2.url == 'http://other.test/page', page2.url)

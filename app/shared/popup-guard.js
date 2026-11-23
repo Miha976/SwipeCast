@@ -10,10 +10,12 @@
  * Règles :
  *  - window.open dans la PAGE PRINCIPALE : toujours bloqué (null), même vers le même site, car le
  *    tab-under ouvre justement la page courante.
- *  - window.open dans une IFRAME (lecteur Vidmoly & co) : on le laisse RÉUSSIR, comme Brave qui ouvre
- *    un onglet. Le plugin ouvre la fenêtre cachée (hiddenPopupWindow) et l'app la ferme aussitôt.
- *    Renvoyer null y serait contre-productif : ces scripts ont un plan B `if (!w) top.location = pub`
- *    lancé depuis une iframe d'un autre domaine, que la Navigation API ne peut pas annuler.
+ *  - window.open dans une IFRAME (lecteur Vidmoly & co) : renvoie une FAUSSE fenêtre. Le script croit
+ *    avoir réussi, donc pas de plan B `if (!w) top.location = pub` (non annulable depuis la page car
+ *    lancé par une iframe d'un autre domaine), et aucune vraie fenêtre Android n'est créée : le plugin
+ *    affichait sa popup « cachée » un instant avant de la rendre transparente (flash blanc).
+ *  - IFRAME qui navigue elle-même vers un autre site juste après un clic (tab-under dans le lecteur :
+ *    le lecteur part sur la pub puis revient à zéro) : annulé via la Navigation API de l'iframe.
  *  - liens <a target=_blank> : autorisés vers le même site depuis la page principale, bloqués sinon
  *    (un lien ne rend pas de référence de fenêtre au script : pas de tab-under possible).
  *  - liens target=_top depuis une iframe : autorisés seulement vers le site hôte.
@@ -39,7 +41,6 @@
     /* liste non injectée */
   }
   var IS_TOP = window.top === window;
-  var nativeOpen = window.open;
   var lastReport = 0;
 
   function baseDomain(host) {
@@ -60,6 +61,43 @@
     if (!IS_TOP) return false;
     var u = resolve(url);
     return !!u && /^https?:$/.test(u.protocol) && baseDomain(u.hostname) === baseDomain(location.hostname);
+  }
+
+  function log(msg, url) {
+    try {
+      console.info('[SwipeCast] ' + msg + (url ? ' → ' + url : '') + ' (' + location.hostname + (IS_TOP ? '' : ', iframe') + ')');
+    } catch (e) {
+      /* console indisponible */
+    }
+  }
+
+  // Fausse fenêtre : assez crédible pour les tests habituels des scripts pub (!w, w.closed, w.location…).
+  function fakeWindow(url) {
+    var noop = function () {};
+    var loc = { href: String(url || 'about:blank'), assign: noop, replace: noop, reload: noop };
+    loc.toString = function () {
+      return loc.href;
+    };
+    var w = {
+      closed: false,
+      name: '',
+      opener: window,
+      location: loc,
+      document: { write: noop, writeln: noop, open: noop, close: noop, body: null, title: '' },
+      focus: noop,
+      blur: noop,
+      postMessage: noop,
+      addEventListener: noop,
+      removeEventListener: noop,
+      moveTo: noop,
+      resizeTo: noop,
+      close: function () {
+        w.closed = true;
+      },
+    };
+    w.window = w;
+    w.self = w;
+    return w;
   }
 
   function send(detail) {
@@ -183,6 +221,35 @@
         var otherSite = baseDomain(dest.hostname) !== baseDomain(location.hostname);
         if (adDest || (otherSite && !e.userInitiated)) {
           e.preventDefault();
+          log('redirection de la page annulée', dest.href);
+          send({ type: 'redirect-blocked', url: dest.href });
+        }
+      } catch (err) {
+        /* en cas de doute, on laisse passer */
+      }
+    });
+  }
+
+  // Iframe (lecteur) qui part elle-même vers un autre site juste après un clic : tab-under dans le lecteur.
+  // Limité aux 4 s qui suivent un clic pour ne pas gêner les lecteurs qui se redirigent au chargement.
+  if (!IS_TOP && window.navigation && window.navigation.addEventListener) {
+    var lastClickAt = 0;
+    window.addEventListener(
+      'pointerdown',
+      function (e) {
+        if (e.isTrusted) lastClickAt = Date.now();
+      },
+      true,
+    );
+    window.navigation.addEventListener('navigate', function (e) {
+      try {
+        if (!e.cancelable || e.hashChange || e.navigationType === 'traverse' || e.navigationType === 'reload') return;
+        var dest = resolve(e.destination && e.destination.url);
+        if (!dest || !/^https?:$/.test(dest.protocol)) return;
+        var recentClick = Date.now() - lastClickAt < 4000;
+        if (isAdUrl(dest.href) || (recentClick && baseDomain(dest.hostname) !== baseDomain(location.hostname))) {
+          e.preventDefault();
+          log('navigation du lecteur annulée', dest.href);
           send({ type: 'redirect-blocked', url: dest.href });
         }
       } catch (err) {
@@ -205,15 +272,12 @@
   }
 
   function guardedOpen(url) {
-    if (!IS_TOP) {
-      // vraie fenêtre (cachée puis fermée côté natif) : le script pub ne déclenche pas son plan B
-      try {
-        return nativeOpen.apply(window, arguments);
-      } catch (e) {
-        return null;
-      }
-    }
     report(url);
+    if (!IS_TOP) {
+      log('popup simulée (iframe)', url);
+      return fakeWindow(url); // pas de plan B, pas de fenêtre native
+    }
+    log('popup bloquée', url);
     return null;
   }
 
