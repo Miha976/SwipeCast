@@ -1,13 +1,19 @@
 # Garde-fou anti-popup (Android) : simulé dans Chrome, injection au début du document dans toutes les frames.
 import sys
 from playwright.sync_api import sync_playwright
-guard = open(sys.argv[1]).read().replace('__SWIPECAST_NONCE__', 'N')
+import json, os
+ad_hosts = json.load(open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[1])), 'ad-hosts.json')))['hosts']
+guard = open(sys.argv[1]).read().replace('__SWIPECAST_NONCE__', 'N').replace('__SWIPECAST_AD_HOSTS__', json.dumps(ad_hosts))
 ok = []
 def check(n, c, x=''): ok.append(bool(c)); print(('PASS ' if c else 'FAIL ') + n, x)
 
 TOP = '''<!doctype html><html><head><meta charset="utf-8"><title>Episode</title></head><body>
 <h1>anime.test episode</h1>
 <iframe id="f" src="http://player.test/embed" width="600" height="300"></iframe>
+<iframe id="cadre" src="http://anime.test/cadre-onclicka.html" sandbox="allow-scripts allow-same-origin" width="10" height="10"></iframe>
+<script src="http://anime.test/site.js"></script>
+<button id="play" style="width:120px;height:40px">▶</button>
+<a id="ext" href="#ancre" style="display:block;width:200px;height:30px">lien</a>
 <a id="topblank" href="http://ads.test/promo" target="_blank" style="display:block;width:200px;height:40px">pub</a>
 <script>window.open = function(){ return 'hijacked' };</script>
 </body></html>'''
@@ -26,7 +32,15 @@ with sync_playwright() as p:
     ctx.add_init_script(guard)
     def route(r):
         u = r.request.url
-        if u.startswith('http://anime.test/'): r.fulfill(status=200, content_type='text/html', body=TOP)
+        if u.startswith('http://js.onclck'):
+            # faux onclicka.js : redirige l'onglet au premier clic (comportement mobile observé)
+            r.fulfill(status=200, content_type='application/javascript',
+                      body="var d=top.document,s=d.createElement('script');s.textContent=\"window.__adLoaded=1;document.addEventListener('click',function(){location.replace('http://casino.test/contato/')},true);\";d.head.appendChild(s);")
+        elif u.startswith('http://anime.test/site.js'):
+            r.fulfill(status=200, content_type='application/javascript', body="window.__siteJs=1;")
+        elif u.startswith('http://anime.test/cadre-onclicka'):
+            r.fulfill(status=200, content_type='text/html', body='<script src="http://js.onclckmn.com/static/onclicka.js"></script>')
+        elif u.startswith('http://anime.test/'): r.fulfill(status=200, content_type='text/html', body=TOP)
         elif u.startswith('http://player.test/'): r.fulfill(status=200, content_type='text/html', body=PLAYER)
         else: r.fulfill(status=200, content_type='text/html', body='<h1>PUB</h1>')
     ctx.route('**/*', route)
@@ -34,6 +48,21 @@ with sync_playwright() as p:
     page.goto('http://anime.test/episode-1'); page.wait_for_timeout(400)
     frame = page.frame(url=lambda u: 'player.test' in u)
 
+    page.wait_for_timeout(400)
+    check('script de régie écrit dans le HTML (iframe cadre-onclicka) → jamais exécuté', page.evaluate("window.__adLoaded") is None)
+    check('les scripts du site fonctionnent toujours', page.evaluate("window.__siteJs") == 1)
+    page.click('#play'); page.wait_for_timeout(500)
+    check('clic sur ▶ : aucune redirection vers le casino', page.url.startswith('http://anime.test/episode-1'), page.url)
+    check('clic sur un bouton ≠ intention de navigation', not any(m['type'] == 'nav-intent' for m in page.evaluate("window.__m")))
+    page.evaluate("var s=document.createElement('script');s.src='http://js.onclckbnr.com/banner-admanager/build.m.js';document.head.appendChild(s)")
+    page.evaluate("var s=document.createElement('script');s.setAttribute('src','http://js.onclcktg.com/x.js');document.head.appendChild(s)")
+    page.wait_for_timeout(400)
+    check('script de régie ajouté par JS (src / setAttribute) → jamais exécuté', page.evaluate("window.__adLoaded") is None)
+    check('fetch vers une régie → rejeté', page.evaluate("fetch('http://bid.onclcktg.com/tags/1').then(()=>'ok',()=>'blocked')") == 'blocked')
+    page.evaluate("document.getElementById('ext').click()"); page.wait_for_timeout(100)
+    check('a.click() d’un script ≠ intention', not any(m['type'] == 'nav-intent' for m in page.evaluate("window.__m")))
+    page.click('#ext'); page.wait_for_timeout(100)
+    check('vrai clic sur un lien → intention signalée', any(m['type'] == 'nav-intent' and m['url'].endswith('#ancre') for m in page.evaluate("window.__m")))
     check('le site ne peut pas remplacer window.open', page.evaluate("window.open('http://ads.test/a')") is None)
     check('popup vers une régie → bloquée et signalée', any(m['type'] == 'popup-blocked' and m['nonce'] == 'N' for m in page.evaluate("window.__m")))
 

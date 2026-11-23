@@ -1,4 +1,4 @@
-import { withStartTime as w } from '../../app/src/models/siteAdapters.ts';
+import { withStartTime as w } from '../../app/src/models/siteAdapters';
 const cases: [string, number, string][] = [
   ['https://www.youtube.com/watch?v=abc&t=10s', 754.9, 'https://www.youtube.com/watch?v=abc&t=754s'],
   ['https://m.youtube.com/watch?v=abc', 61, 'https://m.youtube.com/watch?v=abc&t=61s'],

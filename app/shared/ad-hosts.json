@@ -1,5 +1,5 @@
 {
-  "_comment": "Régies pub / popunder fréquentes sur les sites de streaming. Un domaine bloque aussi ses sous-domaines. À compléter au fil de l'eau.",
+  "_comment": "Régies pub / popunder / redirection fréquentes sur les sites de streaming. Un domaine bloque aussi ses sous-domaines. onclck* = régie « onclicka » vue sur anime-sama (redirection mobile).",
   "hosts": [
     "doubleclick.net",
     "googlesyndication.com",
@@ -35,6 +35,13 @@
     "pushame.com",
     "richpartners.co",
     "realsrv.com",
-    "bidgear.com"
+    "bidgear.com",
+    "onclckmn.com",
+    "onclckbnr.com",
+    "onclcktg.com",
+    "onclckinp.com",
+    "onclckmetrics.com",
+    "onclckads.com",
+    "drimquop.com"
   ]
 }

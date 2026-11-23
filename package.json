@@ -15,6 +15,7 @@
     "build": "npm run build -w app",
     "android": "npm run android -w app",
     "dist:win": "npm run electron:dist -w app",
-    "android:sync": "npm run android:sync -w app"
+    "android:sync": "npm run android:sync -w app",
+    "test:unit": "tsx tests/unit/NavigationGuard.test.ts && tsx tests/unit/siteAdapters.test.ts"
   }
 }

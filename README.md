@@ -81,6 +81,9 @@ Le script est compatible **Trusted Types** (CSP de YouTube) : aucune affectation
 - **Popups / tab-under** : le piège des sites de streaming est le *tab-under* (le script ouvre l'épisode dans une nouvelle fenêtre puis remplace la page par la pub avec `location.replace`, ce qui efface l'épisode de l'historique).
   - PC : Electron refuse toutes les fenêtres (`window.open` → `null`, le script abandonne), et une iframe ne peut plus remplacer la page par un autre site (`will-navigate` + `initiator`). La barre affiche « Popup bloquée · Ouvrir quand même ».
   - Android : `shared/popup-guard.js` est injecté **au début du document dans toutes les frames** (`preShowScriptInjectionTime: 'documentStart'` → `addDocumentStartJavaScript`). Il neutralise `window.open` (non réécrivable par la page) et bloque les calques `<a target=_blank>` et les liens `_top` vers d'autres sites. En dernier recours, les popups natives restantes sont ouvertes cachées puis fermées. Si la page principale change de site dans les 3 s qui suivent, on recharge l'épisode à la même position.
+- **Redirections « onclick » (mobile)** : sur téléphone, des régies comme *onclicka* (vue sur anime-sama) ne font pas de popup : au premier clic sur le lecteur, elles **redirigent l'onglet** (`location.replace`, ce qui efface l'épisode de l'historique). Deux protections :
+  1. le garde-fou bloque l'exécution des scripts, iframes et requêtes des régies connues (MutationObserver avant exécution pour les balises du HTML, setters `src`/`setAttribute` pour celles ajoutées par script, `fetch`/XHR/`sendBeacon`) ;
+  2. `models/NavigationGuard.ts` : un changement de site de la page principale n'est accepté que vers le site d'un **lien réellement touché** (`isTrusted`), vers l'URL ouverte par l'app, ou vers une page déjà visitée (retour). Sinon, l'épisode est rechargé à la même position avec le message « Redirection publicitaire bloquée ». Un clic sur un bouton ne compte pas (la régie se déclenche justement au clic sur ▶). Limite : une connexion OAuth lancée par un bouton est annulée dans le navigateur intégré.
 - **Régies publicitaires** (`shared/ad-hosts.json`) : bloquées pour toutes les requêtes sur PC (`webRequest`), et pour les navigations sur Android (`blockedHosts`). La liste est à compléter au fil de l'eau.
 
 ## Tests
@@ -91,8 +94,8 @@ pip install playwright && npm run build
 python3 tests/e2e/test_tracker.py <dossier avec page.html + clip.webm> app/shared/tracker.js   # 13 vérifications
 python3 tests/e2e/test_e2e.py                                     # appairage UI + synchro + transfert (6 vérifications)
 python3 tests/e2e/test_feedback.py <dossier> app/shared/tracker.js  # Trusted Types, pubs YouTube, DOM réécrit (7 vérifications)
-python3 tests/e2e/test_popup_guard.py app/shared/popup-guard.js  # tab-under, calques, liens _top (10 vérifications)
-node --experimental-strip-types tests/unit/siteAdapters.test.ts   # position dans l'URL (8 vérifications)
+python3 tests/e2e/test_popup_guard.py app/shared/popup-guard.js  # régie onclicka, tab-under, calques, liens _top (18 vérifications)
+npm run test:unit                                                 # NavigationGuard (13) + position dans l'URL (8)
 ```
 
 ## Limites connues (v1)
