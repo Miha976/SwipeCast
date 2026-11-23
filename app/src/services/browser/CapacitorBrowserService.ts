@@ -48,18 +48,29 @@ export class CapacitorBrowserService extends Emitter<Events> implements BrowserS
       return;
     }
     await this.bindListeners();
-    const { id } = await InAppBrowser.openWebView({
-      url,
-      title: 'SwipeCast',
-      toolbarType: ToolBarType.NAVIGATION,
-      showReloadButton: true,
-      activeNativeNavigationForWebview: true,
-      hiddenPopupWindow: true, // les popups qui passeraient malgré tout ne s'affichent jamais
-      // window.open neutralisé avant tout script de la page, dans toutes les frames (iframe du lecteur comprise)
-      preShowScript: this.popupGuard,
-      preShowScriptInjectionTime: 'documentStart',
-      blockedHosts: AD_HOSTS.flatMap((h) => [h, `*.${h}`]), // navigations vers les régies pub
-    });
+    let id: string;
+    try {
+      ({ id } = await InAppBrowser.openWebView({
+        url,
+        title: 'SwipeCast',
+        toolbarType: ToolBarType.NAVIGATION,
+        showReloadButton: true,
+        activeNativeNavigationForWebview: true,
+        hiddenPopupWindow: true, // les popups qui passeraient malgré tout ne s'affichent jamais
+        // window.open neutralisé avant tout script de la page, dans toutes les frames (iframe du lecteur comprise).
+        // Le plugin exige isPresentAfterPageLoad dès qu'un preShowScript est fourni : la vue s'affiche
+        // à la fin du premier chargement (l'UI affiche « Ouverture… » en attendant).
+        preShowScript: this.popupGuard,
+        preShowScriptInjectionTime: 'documentStart',
+        isPresentAfterPageLoad: true,
+        blockedHosts: AD_HOSTS.flatMap((h) => [h, `*.${h}`]), // navigations vers les régies pub
+      }));
+    } catch (e) {
+      // échec du premier chargement : on ne laisse pas une vue invisible derrière nous
+      await InAppBrowser.close().catch(() => undefined);
+      this.unbind();
+      throw new Error(e instanceof Error ? e.message : String(e));
+    }
     this.webviewId = id;
     this.emit('state', this.current);
   }

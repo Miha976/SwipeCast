@@ -226,7 +226,19 @@ export class AppViewModel extends ViewModel<AppState> {
     if (!url) return;
     const history = await this.s.history.add({ url, title: url, currentTime: 0, duration: 0, kind: 'opened' });
     this.setState({ history });
-    await this.s.browser.open(url);
+    await this.openInBrowser(url);
+  }
+
+  /** Ouvre le navigateur intégré avec retour visuel pendant le chargement et message en cas d'échec. */
+  private async openInBrowser(url: string, restore?: import('../models/types').RestoreOptions): Promise<void> {
+    if (!this.s.browser.reactChrome) this.flash('Ouverture…', 'ok'); // Android : la vue apparaît après chargement
+    try {
+      await this.s.browser.open(url, restore);
+      if (this.state.snackbar?.text === 'Ouverture…') this.setState({ snackbar: null });
+    } catch (e) {
+      console.warn('[browser] ouverture impossible', e);
+      this.flash('Impossible d’ouvrir la page (réseau ou adresse invalide)', 'bad');
+    }
   }
 
   /** Ouvre une session à une position donnée (transfert, reprise de l'autre appareil, historique). */
@@ -236,7 +248,7 @@ export class AppViewModel extends ViewModel<AppState> {
     this.setState({ history });
     const time = resumeTime(session.currentTime, rewindSeconds);
     // position encodée dans l'URL quand le site le permet (YouTube t=, Vimeo #t=, Dailymotion start=)
-    await this.s.browser.open(withStartTime(session.url, time), {
+    await this.openInBrowser(withStartTime(session.url, time), {
       time,
       fullscreen: autoFullscreen,
       autoplay: true,
@@ -296,7 +308,7 @@ export class AppViewModel extends ViewModel<AppState> {
   async openBlockedPopup(): Promise<void> {
     const url = this.state.blockedPopup?.url;
     this.setState({ blockedPopup: null });
-    if (url) await this.s.browser.open(url);
+    if (url) await this.openInBrowser(url);
   }
 
   dismissBlockedPopup(): void {
