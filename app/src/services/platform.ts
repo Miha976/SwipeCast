@@ -22,6 +22,7 @@ export interface DesktopBridge {
     toast(text: string): Promise<void>;
     onMessage(cb: (msg: TrackerMessage) => void): () => void;
     onState(cb: (s: BrowsingState | null) => void): () => void;
+    onPopupBlocked(cb: (p: { url: string | null }) => void): () => void;
   };
 }
 

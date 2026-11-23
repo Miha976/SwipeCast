@@ -20,6 +20,12 @@ export interface BrowserService {
   onMessage(cb: (msg: TrackerMessage) => void): () => void;
   /** null = navigateur fermé */
   onState(cb: (state: BrowsingState | null) => void): () => void;
+  /** Une popup (pub le plus souvent) a été bloquée. url = null si inconnue. */
+  onPopupBlocked(cb: (p: PopupBlocked) => void): () => void;
+}
+
+export interface PopupBlocked {
+  url: string | null;
 }
 
 export const restoreCall = (opts: RestoreOptions) =>

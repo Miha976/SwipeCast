@@ -16,6 +16,8 @@ export function BrowserBar({
   onSend,
   onAccept,
   onDismiss,
+  onOpenPopup,
+  onDismissPopup,
 }: {
   state: AppState;
   peer: Device | null;
@@ -24,8 +26,10 @@ export function BrowserBar({
   onSend: () => void;
   onAccept: () => void;
   onDismiss: () => void;
+  onOpenPopup: () => void;
+  onDismissPopup: () => void;
 }) {
-  const { browsing, local, incoming, snackbar } = state;
+  const { browsing, local, incoming, snackbar, blockedPopup } = state;
   if (!browsing) return null;
 
   return (
@@ -45,6 +49,20 @@ export function BrowserBar({
               Ouvrir
             </button>
             <button className="btn btn-ghost h-10 min-h-0 shrink-0 px-3" onClick={onDismiss} aria-label="Ignorer">
+              <Icon name="close" className="h-5 w-5" />
+            </button>
+          </div>
+        ) : blockedPopup ? (
+          <div className="flex items-center gap-3">
+            <span className="truncate font-semibold text-warn">
+              🚫 {blockedPopup.count > 1 ? `${blockedPopup.count} popups bloquées` : 'Popup bloquée'}
+            </span>
+            {blockedPopup.url && (
+              <button className="btn btn-ghost h-10 min-h-0 shrink-0 px-3 text-sm" onClick={onOpenPopup} title={blockedPopup.url}>
+                Ouvrir quand même
+              </button>
+            )}
+            <button className="btn btn-ghost h-10 min-h-0 shrink-0 px-3" onClick={onDismissPopup} aria-label="Masquer">
               <Icon name="close" className="h-5 w-5" />
             </button>
           </div>

@@ -34,6 +34,8 @@ export function App() {
         onSend={() => app.sendToPeer()}
         onAccept={() => app.acceptIncoming()}
         onDismiss={() => app.dismissIncoming()}
+        onOpenPopup={() => app.openBlockedPopup()}
+        onDismissPopup={() => app.dismissBlockedPopup()}
       />
     );
   }

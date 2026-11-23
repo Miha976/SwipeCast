@@ -2,12 +2,19 @@ import { InAppBrowser, ToolBarType } from '@capgo/capacitor-inappbrowser';
 import type { PluginListenerHandle } from '@capacitor/core';
 import { Emitter } from '../../core/Emitter';
 import type { BrowsingState, RestoreOptions, TrackerMessage } from '../../models/types';
-import { restoreCall, type BrowserService } from './BrowserService';
+import { AD_HOSTS, isSameSite } from '../../models/adBlock';
+import { restoreCall, type BrowserService, type PopupBlocked } from './BrowserService';
 import trackerSource from '../../../shared/tracker.js?raw';
 
-type Events = { message: TrackerMessage; state: BrowsingState | null };
+type Events = { message: TrackerMessage; state: BrowsingState | null; popup: PopupBlocked };
 
-/** Android : WebView native du plugin capgo, script de suivi injecté à chaque chargement. */
+/**
+ * Android : WebView native du plugin capgo, script de suivi injecté à chaque chargement.
+ *
+ * Popups : ouvertes en mode caché (`hiddenPopupWindow`) puis fermées immédiatement, sauf si elles
+ * restent sur le même site (connexion, lecteur). C'est ce qui empêchait la pub de passer devant la vidéo.
+ * NB : le plugin émet closeEvent / browserPageLoaded aussi pour les popups → tout est filtré par id.
+ */
 export class CapacitorBrowserService extends Emitter<Events> implements BrowserService {
   readonly reactChrome = false;
   readonly tracksIframes = false; // executeScript ne cible que la frame principale
@@ -15,8 +22,15 @@ export class CapacitorBrowserService extends Emitter<Events> implements BrowserS
   private pendingRestore: RestoreOptions | null = null;
   private handles: PluginListenerHandle[] = [];
   private current: BrowsingState = { url: '', title: '', canGoBack: false };
-  private readonly nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+  private readonly nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
   private readonly tracker = trackerSource.replace('__SWIPECAST_NONCE__', this.nonce);
+
+  /** Événement provenant de la vue principale ? (sans id = ancienne version du plugin → on accepte) */
+  private isMain(id?: string): boolean {
+    return !id || !this.webviewId || id === this.webviewId;
+  }
 
   async open(url: string, restore?: RestoreOptions): Promise<void> {
     this.pendingRestore = restore ?? null;
@@ -34,7 +48,8 @@ export class CapacitorBrowserService extends Emitter<Events> implements BrowserS
       toolbarType: ToolBarType.NAVIGATION,
       showReloadButton: true,
       activeNativeNavigationForWebview: true,
-      // le script de suivi est injecté à chaque 'browserPageLoaded' (il est idempotent)
+      hiddenPopupWindow: true, // les popups ne s'affichent jamais d'elles-mêmes
+      blockedHosts: AD_HOSTS.flatMap((h) => [h, `*.${h}`]), // navigations vers les régies pub
     });
     this.webviewId = id;
     this.emit('state', this.current);
@@ -43,26 +58,42 @@ export class CapacitorBrowserService extends Emitter<Events> implements BrowserS
   private async bindListeners(): Promise<void> {
     if (this.handles.length) return;
     this.handles.push(
-      await InAppBrowser.addListener('browserPageLoaded', () => void this.injectAndRestore()),
+      await InAppBrowser.addListener('browserPageLoaded', (e) => {
+        if (this.isMain(e.id)) void this.injectAndRestore();
+      }),
       await InAppBrowser.addListener('urlChangeEvent', (e) => {
+        if (!this.isMain(e.id)) return;
         this.current = { ...this.current, url: e.url, canGoBack: true };
         this.emit('state', this.current);
       }),
       await InAppBrowser.addListener('messageFromWebview', (e) => {
         const msg = e.detail as TrackerMessage & { nonce?: string };
-        if (msg?.nonce !== this.nonce) return; // message forgé par la page
-        if (msg?.type === 'progress' && msg.isTop) {
+        if (msg?.nonce !== this.nonce) return; // message forgé par la page (ou venant d'une popup)
+        if (msg.type === 'progress' && msg.isTop) {
           this.current = { ...this.current, title: msg.title, url: msg.url };
         }
-        if (msg?.type) this.emit('message', msg);
+        this.emit('message', msg);
       }),
-      await InAppBrowser.addListener('closeEvent', () => {
+      await InAppBrowser.addListener('popupWindowOpened', (e) => void this.onPopup(e.id, e.url)),
+      await InAppBrowser.addListener('closeEvent', (e) => {
+        if (!this.isMain(e.id)) return; // fermeture d'une popup, pas du navigateur
         this.webviewId = null;
         this.pendingRestore = null;
         this.unbind();
         this.emit('state', null);
       }),
     );
+  }
+
+  private async onPopup(id: string, url?: string): Promise<void> {
+    const legit = !!url && /^https?:/i.test(url) && isSameSite(url, this.current.url);
+    if (legit) {
+      await InAppBrowser.show({ id }).catch(() => undefined);
+      return;
+    }
+    await InAppBrowser.close({ id }).catch(() => undefined);
+    this.emit('popup', { url: url && /^https?:/i.test(url) ? url : null });
+    void this.toast('🚫 Popup publicitaire bloquée');
   }
 
   private async injectAndRestore(): Promise<void> {
@@ -86,7 +117,7 @@ export class CapacitorBrowserService extends Emitter<Events> implements BrowserS
   }
 
   async close(): Promise<void> {
-    if (this.webviewId) await InAppBrowser.close().catch(() => undefined);
+    if (this.webviewId) await InAppBrowser.close({ id: this.webviewId }).catch(() => undefined);
   }
 
   async back(): Promise<void> {
@@ -112,5 +143,9 @@ export class CapacitorBrowserService extends Emitter<Events> implements BrowserS
 
   onState(cb: (s: BrowsingState | null) => void) {
     return this.on('state', cb);
+  }
+
+  onPopupBlocked(cb: (p: PopupBlocked) => void) {
+    return this.on('popup', cb);
   }
 }

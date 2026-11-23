@@ -63,6 +63,11 @@
     return vids[0] || null;
   }
 
+  // Pendant une pub YouTube, le <video> lit la pub : on ne doit ni rapporter sa position ni la "seeker".
+  function isAdPlaying() {
+    return /(^|\.)youtube\.com$/.test(location.hostname) && !!document.querySelector('.ad-showing');
+  }
+
   function state() {
     var v = video;
     return {
@@ -79,6 +84,7 @@
   function report(force) {
     var now = Date.now();
     if (!force && now - lastReport < REPORT_EVERY_MS) return;
+    if (isAdPlaying()) return;
     lastReport = now;
     var s = state();
     s.type = 'progress';
@@ -108,6 +114,7 @@
 
   function rescan() {
     attach(pickVideo());
+    if (host && !host.isConnected) buildHandle();
   }
 
   // Les SPA (YouTube…) remplacent les vidéos sans recharger la page.
@@ -182,6 +189,7 @@
       return v.currentTime >= t - 2.5;
     }
     function apply() {
+      if (isAdPlaying()) return false; // on attend la fin de la pub
       if (held()) return true;
       try {
         v.currentTime = t;
@@ -199,6 +207,11 @@
       v.addEventListener(e, onEvt);
     });
     var timer = setInterval(function () {
+      if (isAdPlaying()) {
+        deadline = Date.now() + 15000; // la pub ne consomme pas le délai
+        settledSince = 0;
+        return;
+      }
       // la position doit tenir 2 s de suite (le lecteur peut la réinitialiser juste après)
       if (held()) {
         if (!settledSince) settledSince = Date.now();
@@ -273,37 +286,70 @@
   var host = null;
   var ui = {};
 
+  // Construction sans innerHTML : YouTube (et d'autres) imposent Trusted Types,
+  // qui fait lever une exception sur toute affectation d'innerHTML.
+  function el(tag, cls, parent) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+
   function buildHandle() {
-    if (!IS_TOP || host || !document.body) return;
-    host = document.createElement('swipecast-handle');
-    host.style.cssText = 'all:initial;position:fixed;right:14px;bottom:88px;z-index:2147483647;';
-    var root = host.attachShadow({ mode: 'closed' });
-    root.innerHTML =
-      '<style>' +
-      ':host{all:initial}' +
-      '.pill{font:600 14px/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;' +
-      'align-items:center;gap:6px;padding:12px 10px;border-radius:999px;color:#fff;cursor:grab;user-select:none;' +
-      'touch-action:none;background:linear-gradient(160deg,#6d5efc,#22d3ee);box-shadow:0 8px 24px rgba(0,0,0,.35);' +
-      'opacity:.85;transition:opacity .2s,transform .25s cubic-bezier(.2,.8,.2,1)}' +
-      '.pill:hover,.pill.active{opacity:1}' +
-      '.pill.idle{opacity:.5}' +
-      '.arrow{width:20px;height:20px;display:block}' +
-      '.label{writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:.06em;font-size:13px;text-shadow:0 1px 2px rgba(0,0,0,.35)}' +
-      '.pill.sent{transform:translateY(-120vh)!important;opacity:0}' +
-      '.toast{position:fixed;left:50%;bottom:32px;transform:translateX(-50%);max-width:86vw;' +
-      'font:600 16px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;background:#111827f0;' +
-      'padding:14px 20px;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.4);cursor:pointer;display:none}' +
-      '.toast.show{display:block}' +
-      '</style>' +
-      '<div class="pill" part="pill" title="Glisser vers le haut pour envoyer (Alt+S)">' +
-      '<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg><span class="label">Envoyer</span></div>' +
-      '<div class="toast"></div>';
-    ui.pill = root.querySelector('.pill');
-    ui.label = root.querySelector('.label');
-    ui.toast = root.querySelector('.toast');
-    (document.body || document.documentElement).appendChild(host);
-    bindGesture(ui.pill);
-    updateHandle();
+    if (!IS_TOP || !document.body) return;
+    if (host) {
+      // certaines SPA réécrivent <body> : on raccroche la pastille si elle a été retirée
+      if (!host.isConnected) document.body.appendChild(host);
+      return;
+    }
+    try {
+      host = document.createElement('swipecast-handle');
+      host.style.cssText = 'all:initial;position:fixed;right:14px;bottom:88px;z-index:2147483647;';
+      var root = host.attachShadow({ mode: 'closed' });
+      var style = el('style', null, root);
+      style.textContent =
+        ':host{all:initial}' +
+        '.pill{font:600 14px/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;' +
+        'align-items:center;gap:6px;padding:12px 10px;border-radius:999px;color:#fff;cursor:grab;user-select:none;' +
+        'touch-action:none;background:linear-gradient(160deg,#6d5efc,#22d3ee);box-shadow:0 8px 24px rgba(0,0,0,.35);' +
+        'opacity:.85;transition:opacity .2s,transform .25s cubic-bezier(.2,.8,.2,1)}' +
+        '.pill:hover,.pill.active{opacity:1}' +
+        '.pill.idle{opacity:.5}' +
+        '.arrow{width:20px;height:20px;display:block}' +
+        '.label{writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:.06em;font-size:13px;text-shadow:0 1px 2px rgba(0,0,0,.35)}' +
+        '.pill.sent{transform:translateY(-120vh)!important;opacity:0}' +
+        '.toast{position:fixed;left:50%;bottom:32px;transform:translateX(-50%);max-width:86vw;' +
+        'font:600 16px/1.3 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;background:#111827f0;' +
+        'padding:14px 20px;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.4);cursor:pointer;display:none}' +
+        '.toast.show{display:block}';
+
+      ui.pill = el('div', 'pill', root);
+      ui.pill.title = 'Glisser vers le haut pour envoyer (Alt+S)';
+      var SVG = 'http://www.w3.org/2000/svg';
+      var svg = document.createElementNS(SVG, 'svg');
+      svg.setAttribute('class', 'arrow');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('fill', 'none');
+      svg.setAttribute('stroke', '#fff');
+      svg.setAttribute('stroke-width', '2.6');
+      svg.setAttribute('stroke-linecap', 'round');
+      svg.setAttribute('stroke-linejoin', 'round');
+      var path = document.createElementNS(SVG, 'path');
+      path.setAttribute('d', 'M12 19V5M6 11l6-6 6 6');
+      svg.appendChild(path);
+      ui.pill.appendChild(svg);
+      ui.label = el('span', 'label', ui.pill);
+      ui.label.textContent = 'Envoyer';
+      ui.toast = el('div', 'toast', root);
+
+      document.body.appendChild(host);
+      bindGesture(ui.pill);
+      updateHandle();
+    } catch (e) {
+      // l'interface ne doit jamais empêcher le suivi vidéo de fonctionner
+      host = null;
+      ui = {};
+    }
   }
 
   function updateHandle() {
@@ -377,11 +423,6 @@
     post({ type: 'handoff-request', state: state() });
   }
 
-  if (IS_TOP) {
-    if (document.body) buildHandle();
-    else document.addEventListener('DOMContentLoaded', buildHandle);
-  }
-
   window.__swipecast = {
     version: 1,
     rescan: rescan,
@@ -398,6 +439,11 @@
       if (host) host.remove();
     },
   };
+
+  if (IS_TOP) {
+    if (document.body) buildHandle();
+    else document.addEventListener('DOMContentLoaded', buildHandle);
+  }
 
   rescan();
   post({ type: 'ready', isTop: IS_TOP, url: location.href });

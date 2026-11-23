@@ -17,6 +17,7 @@ const {
   nativeImage,
   dialog,
   webFrameMain,
+  session,
 } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -31,6 +32,28 @@ const TRACKER = fs
   .readFileSync(path.join(__dirname, '..', 'shared', 'tracker.js'), 'utf8')
   .replace('__SWIPECAST_NONCE__', NONCE);
 const ICON = path.join(__dirname, 'assets', 'icon.png');
+const AD_HOSTS = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'shared', 'ad-hosts.json'), 'utf8')).hosts;
+
+function isAdHost(hostname) {
+  const h = String(hostname).toLowerCase();
+  return AD_HOSTS.some((d) => h === d || h.endsWith('.' + d));
+}
+
+let adBlockInstalled = false;
+/** Bloque requêtes ET navigations vers les régies pub, pour toute la session du navigateur intégré. */
+function installAdBlock() {
+  if (adBlockInstalled) return;
+  adBlockInstalled = true;
+  session.fromPartition('persist:browser').webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (details, cb) => {
+    let blocked = false;
+    try {
+      blocked = isAdHost(new URL(details.url).hostname);
+    } catch {
+      /* URL exotique : on laisse passer */
+    }
+    cb({ cancel: blocked });
+  });
+}
 
 /** @type {BrowserWindow | null} */ let win = null;
 /** @type {WebContentsView | null} */ let view = null;
@@ -175,6 +198,7 @@ function layout() {
 
 function ensureView() {
   if (view) return view;
+  installAdBlock();
   view = new WebContentsView({
     webPreferences: {
       partition: 'persist:browser', // cookies conservés : on reste connecté aux sites de streaming
@@ -212,9 +236,16 @@ function ensureView() {
     layout();
   });
 
-  // Popups publicitaires bloquées ; un vrai clic "nouvel onglet" s'ouvre dans la même vue.
-  wc.setWindowOpenHandler(({ url, disposition }) => {
-    if (disposition === 'foreground-tab' && /^https?:/i.test(url)) wc.loadURL(url);
+  // Toutes les popups sont refusées (c'est le vecteur principal des pubs sur les sites de streaming).
+  // L'UI affiche « Popup bloquée · Ouvrir quand même » pour les rares cas légitimes.
+  wc.setWindowOpenHandler(({ url }) => {
+    let httpUrl = null;
+    try {
+      if (/^https?:/i.test(url) && !isAdHost(new URL(url).hostname)) httpUrl = url;
+    } catch {
+      /* URL invalide */
+    }
+    win?.webContents.send('sc:popup-blocked', { url: httpUrl });
     return { action: 'deny' };
   });
 
