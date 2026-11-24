@@ -17,6 +17,7 @@ import { withStartTime } from '../models/siteAdapters';
 import type { Services } from '../services/container';
 import type { SyncStatus } from '../services/SyncService';
 import { StorageKeys } from '../services/StorageService';
+import type { PermissionStatus } from '../services/LocalNetworkPermission';
 
 export interface AppState {
   ready: boolean;
@@ -35,6 +36,8 @@ export interface AppState {
   history: HistoryEntry[];
   settings: Settings;
   snackbar: { text: string; tone: 'ok' | 'warn' | 'bad' } | null;
+  /** accès au réseau local (Android 17 : permission d'exécution) — requis pour joindre le PC */
+  localNetwork: PermissionStatus;
   /** dernière popup bloquée (affichée dans la barre du navigateur sur PC) */
   blockedPopup: { url: string | null; count: number } | null;
   view: 'home' | 'pairing';
@@ -68,6 +71,7 @@ export class AppViewModel extends ViewModel<AppState> {
       settings: DEFAULT_SETTINGS,
       snackbar: null,
       blockedPopup: null,
+      localNetwork: 'granted',
       view: 'home',
     });
   }
@@ -99,7 +103,8 @@ export class AppViewModel extends ViewModel<AppState> {
 
     if (this.s.platform === 'android') {
       // Android suspend la WebView en arrière-plan : on se reconnecte au retour.
-      const h = await CapApp.addListener('resume', () => sync.ensureConnected());
+      // Retour au premier plan (ex. depuis les paramètres Android) : permission revérifiée, reconnexion.
+      const h = await CapApp.addListener('resume', () => void this.refreshLocalNetwork().then(() => sync.ensureConnected()));
       this.track(() => void h.remove());
     }
     const onVisible = () => document.visibilityState === 'visible' && sync.ensureConnected();
@@ -124,8 +129,40 @@ export class AppViewModel extends ViewModel<AppState> {
       history: list,
       connection,
       view: connection ? 'home' : 'pairing',
+      localNetwork: await this.s.localNetwork.check(),
     });
-    if (connection) sync.connect(connection);
+    if (connection) {
+      // Déjà appairé : sans l'accès au réseau local, la connexion échouerait en silence.
+      if (this.state.localNetwork !== 'granted') await this.ensureLocalNetwork();
+      sync.connect(connection);
+    }
+  }
+
+  // ------------------------------------------------------------ réseau local (Android 17)
+  private async refreshLocalNetwork(): Promise<PermissionStatus> {
+    const localNetwork = await this.s.localNetwork.check();
+    this.setState({ localNetwork });
+    return localNetwork;
+  }
+
+  /** Demande la permission si Android peut encore l'afficher ; renvoie l'état final. */
+  async ensureLocalNetwork(): Promise<PermissionStatus> {
+    let state = await this.refreshLocalNetwork();
+    if (state === 'prompt' || state === 'prompt-with-rationale') {
+      state = await this.s.localNetwork.request();
+      this.setState({ localNetwork: state });
+    }
+    if (state === 'granted') this.s.sync.ensureConnected();
+    return state;
+  }
+
+  /** Bouton du bandeau : nouvelle demande, ou paramètres Android si la demande n'est plus proposée. */
+  async allowLocalNetwork(): Promise<void> {
+    if (this.state.localNetwork === 'denied') {
+      await this.s.localNetwork.openSettings(); // la permission est revérifiée au retour (resume)
+      return;
+    }
+    await this.ensureLocalNetwork();
   }
 
   // ------------------------------------------------------------ appairage

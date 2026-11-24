@@ -9,6 +9,7 @@ import { BrowserBar } from './views/components/BrowserBar';
 import { HomePage } from './views/pages/HomePage';
 import { PairingPage } from './views/pages/PairingPage';
 import { Icon } from './views/components/Icon';
+import { LocalNetworkBanner } from './views/components/LocalNetworkBanner';
 
 export function App() {
   const services = useMemo(() => createServices(), []);
@@ -58,6 +59,8 @@ export function App() {
           </button>
         )}
       </header>
+
+      <LocalNetworkBanner state={state.localNetwork} onAllow={() => app.allowLocalNetwork()} />
 
       {state.status === 'unauthorized' && state.view === 'home' && (
         <div className="card border-bad/30 text-bad">

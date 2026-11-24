@@ -1,14 +1,20 @@
 package dev.miha976.swipecast.gecko;
 
 import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -16,13 +22,26 @@ import org.json.JSONObject;
  * Pont Capacitor ↔ navigateur GeckoView (utilisé par src/services/browser/GeckoBrowserService.ts).
  *
  * Méthodes : open({url, restore?}), close(), back(), pause(), toast({text})
+ *           checkLocalNetwork(), requestLocalNetwork(), openAppSettings()
  * Événements : message (état du script de suivi d'une frame), state ({url,title,canGoBack} | {closed:true}),
  *              popupBlocked ({url?})
+ *
+ * Réseau local (Android 17) : une app qui cible l'API 37 n'accède plus au réseau local sans la
+ * permission d'exécution ACCESS_LOCAL_NETWORK (groupe « Appareils à proximité »). Sans elle, le hub
+ * du PC est injoignable alors que le navigateur, lui, y arrive. Sous Android 16 et avant, la
+ * permission n'existe pas et l'accès est implicite : on répond « granted ».
  */
-@CapacitorPlugin(name = "SwipecastGecko")
+@CapacitorPlugin(
+    name = "SwipecastGecko",
+    permissions = { @Permission(alias = SwipecastGeckoPlugin.LOCAL_NETWORK, strings = { SwipecastGeckoPlugin.ACCESS_LOCAL_NETWORK }) }
+)
 public class SwipecastGeckoPlugin extends Plugin implements GeckoHost.Listener {
 
     private static final String TAG = "SwipeCastGecko";
+    static final String LOCAL_NETWORK = "localNetwork";
+    /** Manifest.permission.ACCESS_LOCAL_NETWORK (API 37), en chaîne pour rester lisible sur les SDK plus anciens. */
+    static final String ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK";
+    private static final int API_ANDROID_17 = 37;
 
     private GeckoHost host() {
         return GeckoHost.get(getContext());
@@ -71,6 +90,47 @@ public class SwipecastGeckoPlugin extends Plugin implements GeckoHost.Listener {
     public void toast(PluginCall call) {
         String text = call.getString("text", "");
         getActivity().runOnUiThread(() -> host().toast(text));
+        call.resolve();
+    }
+
+    // ------------------------------------------------------------------ réseau local (Android 17)
+
+    private static boolean localNetworkPermissionExists() {
+        return Build.VERSION.SDK_INT >= API_ANDROID_17;
+    }
+
+    /** granted | prompt | prompt-with-rationale | denied (denied = Android ne reproposera plus la demande). */
+    private void resolveLocalNetwork(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("state", localNetworkPermissionExists() ? getPermissionState(LOCAL_NETWORK).toString() : "granted");
+        call.resolve(r);
+    }
+
+    @PluginMethod
+    public void checkLocalNetwork(PluginCall call) {
+        resolveLocalNetwork(call);
+    }
+
+    @PluginMethod
+    public void requestLocalNetwork(PluginCall call) {
+        if (!localNetworkPermissionExists() || getPermissionState(LOCAL_NETWORK) == PermissionState.GRANTED) {
+            resolveLocalNetwork(call);
+            return;
+        }
+        requestPermissionForAlias(LOCAL_NETWORK, call, "localNetworkResult");
+    }
+
+    @PermissionCallback
+    private void localNetworkResult(PluginCall call) {
+        resolveLocalNetwork(call);
+    }
+
+    /** Fiche de l'app dans les paramètres Android (après un refus définitif). */
+    @PluginMethod
+    public void openAppSettings(PluginCall call) {
+        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", getContext().getPackageName(), null));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(intent);
         call.resolve();
     }
 

@@ -84,6 +84,7 @@ Le navigateur intégré Android est une **GeckoView** pilotée en natif (`androi
 - **Capacitor 9** (9.0.0-rc, plugins officiels en 9.0.0-alpha) : GeckoView exige `compileSdk` 37 et `androidx.core` 1.19, donc AGP 9 — la chaîne de Capacitor 9 (AGP 9.4.1, Gradle 9.8.2, SDK 37, `minSdk` 26). **Node 24** requis par le CLI Capacitor 9 ; Android Studio récent compatible AGP 9.4.
 - GeckoView figé (`variables.gradle`), dépôt Maven de Mozilla (`maven.mozilla.org`) ; ABI `arm64-v8a` + `x86_64`. À monter régulièrement (correctifs de sécurité de Firefox).
 - L'ancienne WebView (plugin capgo, sans version Capacitor 9) a été retirée.
+- **Android 17 : accès au réseau local.** Une app qui cible l'API 37 ne joint plus le réseau local sans la permission d'exécution `ACCESS_LOCAL_NETWORK` (groupe « Appareils à proximité ») — symptôme : « PC injoignable » alors que le navigateur du téléphone joint `http://<IP>:47321/health`. Elle est déclarée dans le manifeste, demandée à l'appairage et au lancement ; en cas de refus, un bandeau propose de réessayer ou d'ouvrir les paramètres.
 - `targetSdk` 37 impose l'affichage bord à bord : l'activité du navigateur applique les marges des barres système, sauf en plein écran vidéo.
 - Logs : `adb logcat -s SwipeCastGecko GeckoConsole`.
 

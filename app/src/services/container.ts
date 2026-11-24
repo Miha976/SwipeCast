@@ -6,6 +6,7 @@ import { createNotifications } from './NotificationService';
 import type { BrowserService } from './browser/BrowserService';
 import { ElectronBrowserService } from './browser/ElectronBrowserService';
 import { GeckoBrowserService } from './browser/GeckoBrowserService';
+import { createLocalNetworkPermission } from './LocalNetworkPermission';
 import { WebFallbackBrowserService } from './browser/WebFallbackBrowserService';
 
 /** Composition des dépendances selon la plateforme (point unique où l'on choisit les implémentations). */
@@ -27,6 +28,7 @@ export function createServices() {
     sync: new SyncService(),
     history: new HistoryRepository(storage),
     notifications: createNotifications(platform, desktop?.focusWindow),
+    localNetwork: createLocalNetworkPermission(platform),
   };
 }
 

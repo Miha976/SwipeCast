@@ -1,22 +1,10 @@
-import { registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import { Emitter } from '../../core/Emitter';
 import { FrameAggregator } from '../../models/FrameAggregator';
-import type { BrowsingState, RestoreOptions, TrackerMessage, TrackerState } from '../../models/types';
+import type { TrackerMessage, BrowsingState, RestoreOptions, TrackerState } from '../../models/types';
 import type { BrowserService, PopupBlocked } from './BrowserService';
+import { Gecko } from '../native/SwipecastGecko';
 
-/** Plugin natif : android/app/src/main/java/dev/miha976/swipecast/gecko/SwipecastGeckoPlugin.java */
-interface SwipecastGeckoPlugin {
-  open(options: { url: string; restore?: RestoreOptions }): Promise<void>;
-  close(): Promise<void>;
-  back(): Promise<void>;
-  pause(): Promise<void>;
-  toast(options: { text: string }): Promise<void>;
-  addListener(event: 'message', cb: (m: TrackerMessage & { frame?: string }) => void): Promise<PluginListenerHandle>;
-  addListener(event: 'state', cb: (s: BrowsingState | { closed: true }) => void): Promise<PluginListenerHandle>;
-  addListener(event: 'popupBlocked', cb: (p: { url?: string }) => void): Promise<PluginListenerHandle>;
-}
 
-const Gecko = registerPlugin<SwipecastGeckoPlugin>('SwipecastGecko');
 
 type Events = { message: TrackerMessage; state: BrowsingState | null; popup: PopupBlocked };
 
