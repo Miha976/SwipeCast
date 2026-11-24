@@ -13,7 +13,8 @@ ext {
     androidxJunitVersion = '1.3.0'
     androidxEspressoCoreVersion = '3.7.0'
     cordovaAndroidVersion = '14.0.1'
-    // Dernière version publiée (canal release). Une fois le prototype validé, figer la version exacte
-    // affichée par ./gradlew :app:dependencies (ex. '147.0.20251120203629').
-    geckoviewVersion = '+'
+    // Version FIGÉE. GeckoView 160+ est compilé avec compileSdk 37 et tire androidx.core 1.19
+    // (AGP 9.1 requis) : incompatible avec Capacitor 8 (AGP 8.13, compileSdk 36).
+    // 159 = dernière version avant ce passage. Ne monter qu'avec une migration AGP 9 / SDK 37.
+    geckoviewVersion = '159.0.20261102144711'
 }

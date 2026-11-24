@@ -81,7 +81,7 @@ Le navigateur intégré Android est une **GeckoView** pilotée en natif (`androi
 | Lecture | autoplay avec le son et DRM autorisés (`PermissionDelegate`) |
 
 - `npm run android:sync` génère l'extension (`npm run gecko:ext`) puis synchronise Capacitor.
-- `minSdk` 26 (Android 8), ABI `arm64-v8a` + `x86_64`. GeckoView vient du dépôt Maven de Mozilla (`maven.mozilla.org`), version `+` à figer une fois validée.
+- `minSdk` 26 (Android 8), ABI `arm64-v8a` + `x86_64`. GeckoView vient du dépôt Maven de Mozilla (`maven.mozilla.org`), version **figée à 159** : la 160 exige `compileSdk` 37 et AGP 9.1, incompatibles avec Capacitor 8 (AGP 8.13).
 - Repli possible sur l'ancienne WebView : `USE_GECKO = false` dans `src/services/container.ts`.
 - Logs : `adb logcat -s SwipeCastGecko GeckoConsole`.
 
