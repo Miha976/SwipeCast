@@ -78,7 +78,6 @@ public final class GeckoHost {
 
     private GeckoHost(Context context) {
         this.context = context;
-        Log.i(TAG, "GeckoHost prêt (signal de tap v2, traces de navigation)"); // repère : bonne version installée
     }
 
     public void setListener(@Nullable Listener listener) {
@@ -179,7 +178,7 @@ public final class GeckoHost {
             if (!(message instanceof JSONObject)) return null;
             JSONObject m = (JSONObject) message;
             if ("userNav".equals(m.optString("type"))) {
-                Log.i(TAG, "tap signalé : " + m.optString("url") + " | page=" + m.optString("page") + " | principale=" + sender.isTopLevel());
+                Log.d(TAG, "tap signalé : " + m.optString("url") + " | page=" + m.optString("page") + " | principale=" + sender.isTopLevel());
                 // Tap réel sur un lien (event.isTrusted, monde isolé : la page ne peut pas l'imiter).
                 // Seulement la page principale : les liens des iframes (pubs du lecteur) ne comptent pas.
                 if (sender.isTopLevel()) onUserTap(m.optString("url"), m.optString("page"));
@@ -218,7 +217,7 @@ public final class GeckoHost {
             if (!p.done && userTaps.consume(p.uri, p.current, now)) {
                 p.done = true;
                 pendingNavs.remove(p);
-                Log.i(TAG, "  → autorisée (tap reçu après la demande) : " + p.uri);
+                Log.d(TAG, "  → autorisée (tap reçu après la demande) : " + p.uri);
                 p.result.complete(AllowOrDeny.ALLOW);
             }
         }
@@ -227,10 +226,10 @@ public final class GeckoHost {
     /** Navigation que la règle refuserait faute de geste connu : autorisée si un tap réel la justifie. */
     private GeckoResult<AllowOrDeny> allowIfTapped(String uri, String trigger, String current) {
         if (userTaps.consume(uri, current, SystemClock.uptimeMillis())) {
-            Log.i(TAG, "  → autorisée (tap déjà reçu)");
+            Log.d(TAG, "  → autorisée (tap déjà reçu)");
             return GeckoResult.allow();
         }
-        Log.i(TAG, "  → en attente du signal de tap (" + TAP_WAIT_MS + " ms)");
+        Log.d(TAG, "  → en attente du signal de tap (" + TAP_WAIT_MS + " ms)");
         PendingNav p = new PendingNav(uri, current);
         pendingNavs.add(p);
         main.postDelayed(() -> {
@@ -358,7 +357,8 @@ public final class GeckoHost {
         @Nullable
         @Override
         public GeckoResult<AllowOrDeny> onLoadRequest(@NonNull GeckoSession s, @NonNull LoadRequest r) {
-            Log.i(TAG, "nav[" + (r.target == TARGET_WINDOW_NEW ? "nouvelle fenêtre" : "onglet") + "] " + r.uri
+            // Décisions détaillées : adb logcat -s SwipeCastGecko:D (blocages seuls : :I)
+            Log.d(TAG, "nav[" + (r.target == TARGET_WINDOW_NEW ? "nouvelle fenêtre" : "onglet") + "] " + r.uri
                 + " | trigger=" + r.triggerUri + " | courante=" + currentUri + " | geste=" + r.hasUserGesture
                 + " | redirection=" + r.isRedirect + " | directe=" + r.isDirectNavigation);
             if (r.target == TARGET_WINDOW_NEW) {
@@ -379,7 +379,7 @@ public final class GeckoHost {
                 r.isDirectNavigation
             );
             if (ok) {
-                Log.i(TAG, "  → autorisée (règle)");
+                Log.d(TAG, "  → autorisée (règle)");
                 return GeckoResult.allow();
             }
             // Lancée depuis la page sans geste connu : GeckoView ne le transmet pas pour un autre site.
