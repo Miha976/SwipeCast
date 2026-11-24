@@ -14,6 +14,7 @@ for (const f of ['manifest.json', 'background.js']) copyFileSync(join(src, f), j
 
 const content = [
   readFileSync(join(src, 'content-prelude.js'), 'utf8'),
+  readFileSync(join(src, 'link-guard.js'), 'utf8'),
   '/* ---- shared/tracker.js ---- */',
   readFileSync(join(app, 'shared', 'tracker.js'), 'utf8'),
   readFileSync(join(src, 'content-epilogue.js'), 'utf8'),

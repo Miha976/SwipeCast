@@ -98,9 +98,47 @@ public final class NavigationPolicy {
 
     /**
      * Lien target=_blank / window.open : jamais de nouvelle fenêtre.
-     * @return true si le lien doit s'ouvrir dans l'onglet courant (lien du même site touché par l'utilisateur).
+     *
+     * Attention : pour une nouvelle fenêtre, GeckoView lit hasUserGesture sur sa fenêtre interne et non
+     * sur la page (LoadURIDelegate) : il vaut en pratique toujours faux. Le cas courant (lien touché) est
+     * donc réglé dans la page par l'extension (gecko-ext/link-guard.js, qui voit le vrai tap et ouvre
+     * ces liens dans l'onglet) ; ici, filet de sécurité pour les ouvertures par script.
+     *
+     * @return true si le lien doit s'ouvrir dans l'onglet courant :
+     *         - sur un moteur de recherche, ouverture demandée par la page elle-même (pas une iframe) :
+     *           ces pages n'ouvrent pas de popups pub, et leurs résultats vont vers un autre site ;
+     *         - lien du même site, si le geste est connu.
      */
     public static boolean openNewWindowInCurrentTab(String uri, String triggerUri, String currentUri, boolean hasUserGesture) {
-        return hasUserGesture && sameSite(uri, currentUri) && sameSite(triggerUri, currentUri);
+        if (siteOf(uri) == null) return false;
+        boolean fromPage = triggerUri == null || sameSite(triggerUri, currentUri);
+        if (!fromPage) return false;
+        if (isSearchEngine(currentUri)) return true;
+        return hasUserGesture && sameSite(uri, currentUri);
+    }
+
+    /** Page d'un moteur de recherche connu (hôte exact : un sous-domaine quelconque de brave.com ne suffit pas). */
+    static boolean isSearchEngine(String uri) {
+        if (siteOf(uri) == null) return false;
+        String host;
+        try {
+            host = new URI(uri).getHost().toLowerCase(Locale.ROOT);
+        } catch (Exception e) {
+            return false;
+        }
+        switch (host) {
+            case "search.brave.com":
+            case "duckduckgo.com":
+            case "html.duckduckgo.com":
+            case "www.bing.com":
+            case "www.qwant.com":
+            case "www.ecosia.org":
+            case "www.startpage.com":
+            case "search.yahoo.com":
+                return true;
+            default:
+                // www.google.fr, www.google.com, www.google.co.uk…
+                return host.matches("www\\.google\\.[a-z]{2,3}(\\.[a-z]{2})?");
+        }
     }
 }

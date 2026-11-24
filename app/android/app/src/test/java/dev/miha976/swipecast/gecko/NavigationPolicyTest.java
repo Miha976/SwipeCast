@@ -56,4 +56,33 @@ public class NavigationPolicyTest {
         assertFalse(NavigationPolicy.openNewWindowInCurrentTab(CASINO, VIDMOLY, EP, true));
         assertFalse(NavigationPolicy.openNewWindowInCurrentTab("https://anime-sama.to/planning", EP, EP, false));
     }
+
+    static final String BRAVE = "https://search.brave.com/search?q=firefly+wedding";
+
+    @Test
+    public void resultatDeRechercheOuvertDansLOnglet() {
+        // Brave Search ouvre ses résultats en target=_blank : un résultat touché s'ouvre ici.
+        assertTrue(NavigationPolicy.openNewWindowInCurrentTab(EP, BRAVE, BRAVE, true));
+        assertTrue(NavigationPolicy.openNewWindowInCurrentTab(EP, "https://www.google.fr/search?q=x", "https://www.google.fr/search?q=x", true));
+        // GeckoView ne transmet pas le geste pour une nouvelle fenêtre : sur un moteur, ouvert quand même
+        assertTrue(NavigationPolicy.openNewWindowInCurrentTab(EP, BRAVE, BRAVE, false));
+        // origine inconnue (triggerUri absent) sur un moteur : page elle-même
+        assertTrue(NavigationPolicy.openNewWindowInCurrentTab(EP, null, BRAVE, false));
+        // lancé par une iframe tierce dans la page de résultats : bloqué
+        assertFalse(NavigationPolicy.openNewWindowInCurrentTab(CASINO, VIDMOLY, BRAVE, true));
+        // pas de schéma exotique
+        assertFalse(NavigationPolicy.openNewWindowInCurrentTab("intent://x#Intent;end", BRAVE, BRAVE, true));
+        // sur un site de streaming, un popup vers un autre site reste bloqué
+        assertFalse(NavigationPolicy.openNewWindowInCurrentTab(CASINO, EP, EP, true));
+    }
+
+    @Test
+    public void moteursDeRecherche() {
+        assertTrue(NavigationPolicy.isSearchEngine(BRAVE));
+        assertTrue(NavigationPolicy.isSearchEngine("https://duckduckgo.com/?q=x"));
+        assertTrue(NavigationPolicy.isSearchEngine("https://www.google.co.uk/search?q=x"));
+        assertFalse(NavigationPolicy.isSearchEngine("https://brave.com/"));
+        assertFalse(NavigationPolicy.isSearchEngine("https://www.google.evil.com/"));
+        assertFalse(NavigationPolicy.isSearchEngine(EP));
+    }
 }
