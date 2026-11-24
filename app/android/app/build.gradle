@@ -9,7 +9,12 @@ def androidxEspressoCoreVersion = rootProject.ext.androidxEspressoCoreVersion
 
 android {
     namespace = "dev.miha976.swipecast"
-    compileSdk = rootProject.ext.compileSdkVersion
+    // GeckoView 160 exige l'API 37.2 (version mineure d'Android 17) : DSL compileSdk d'AGP 9.
+    compileSdk {
+        version = release(rootProject.ext.compileSdkVersion) {
+            minorApiLevel = rootProject.ext.compileSdkMinorVersion
+        }
+    }
     defaultConfig {
         applicationId "dev.miha976.swipecast"
         minSdkVersion rootProject.ext.minSdkVersion
