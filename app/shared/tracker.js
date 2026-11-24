@@ -5,9 +5,9 @@
  *  - restaure une position (seek + lecture + plein écran) à la réception d'un transfert ;
  *  - affiche une poignée "glisser pour envoyer" (frame principale uniquement).
  *
- * Pont vers l'app :
- *   - Electron  : window.__swipecastBridge.post(msg)   (exposé par electron/view-preload.cjs)
- *   - Android   : window.mobileApp.postMessage({detail}) (fourni par @capgo/inappbrowser)
+ * Pont vers l'app : window.__swipecastBridge.post(msg)
+ *   - PC (Electron)        : exposé par electron/view-preload.cjs
+ *   - Android (GeckoView)  : défini par l'extension intégrée (app/gecko-ext/content-prelude.js)
  *
  * Idempotent : peut être ré-injecté à chaque navigation sans effet de bord.
  */
@@ -28,7 +28,6 @@
     msg.nonce = NONCE;
     try {
       if (window.__swipecastBridge && window.__swipecastBridge.post) return window.__swipecastBridge.post(msg);
-      if (window.mobileApp && window.mobileApp.postMessage) return window.mobileApp.postMessage({ detail: msg });
     } catch (e) {
       /* le pont n'est pas encore prêt */
     }

@@ -6,8 +6,8 @@ Basculer une vidéo en cours entre **téléphone Android** et **PC Windows** san
  Téléphone (Capacitor)                       PC Windows (Electron)
 ┌───────────────────────┐   WebSocket LAN   ┌────────────────────────────────┐
 │ UI React (MVVM)       │◄─────────────────►│ Hub Node (ws) ◄─► UI React      │
-│ InAppBrowser (capgo)  │  progress/handoff │  port 47321       WebContentsView│
-│  └ tracker.js injecté │                   │                    └ tracker.js │
+│ GeckoView + uBlock O. │  progress/handoff │  port 47321       WebContentsView│
+│  └ extension tracker  │                   │                    └ tracker.js │
 └───────────────────────┘                   └────────────────────────────────┘
 ```
 
@@ -83,7 +83,6 @@ Le navigateur intégré Android est une **GeckoView** pilotée en natif (`androi
 - `npm run android:sync` génère l'extension (`npm run gecko:ext`) puis synchronise Capacitor.
 - **Capacitor 9** (9.0.0-rc, plugins officiels en 9.0.0-alpha) : GeckoView exige `compileSdk` 37 et `androidx.core` 1.19, donc AGP 9 — la chaîne de Capacitor 9 (AGP 9.4.1, Gradle 9.8.2, SDK 37, `minSdk` 26). **Node 24** requis par le CLI Capacitor 9 ; Android Studio récent compatible AGP 9.4.
 - GeckoView figé (`variables.gradle`), dépôt Maven de Mozilla (`maven.mozilla.org`) ; ABI `arm64-v8a` + `x86_64`. À monter régulièrement (correctifs de sécurité de Firefox).
-- L'ancienne WebView (plugin capgo, sans version Capacitor 9) a été retirée.
 - **Android 17 : accès au réseau local.** Une app qui cible l'API 37 ne joint plus le réseau local sans la permission d'exécution `ACCESS_LOCAL_NETWORK` (groupe « Appareils à proximité ») — symptôme : « PC injoignable » alors que le navigateur du téléphone joint `http://<IP>:47321/health`. Elle est déclarée dans le manifeste, demandée à l'appairage et au lancement ; en cas de refus, un bandeau propose de réessayer ou d'ouvrir les paramètres.
 - `targetSdk` 37 impose l'affichage bord à bord : l'activité du navigateur applique les marges des barres système, sauf en plein écran vidéo.
 - Logs : `adb logcat -s SwipeCastGecko GeckoConsole`.
@@ -98,14 +97,10 @@ Le script est compatible **Trusted Types** (CSP de YouTube) : aucune affectation
 
 ## Blocage des pubs
 
-- **Popups / tab-under** : le piège des sites de streaming est le *tab-under* (le script ouvre l'épisode dans une nouvelle fenêtre puis remplace la page par la pub avec `location.replace`, ce qui efface l'épisode de l'historique).
-  - PC : Electron refuse toutes les fenêtres (`window.open` → `null`, le script abandonne), et une iframe ne peut plus remplacer la page par un autre site (`will-navigate` + `initiator`). La barre affiche « Popup bloquée · Ouvrir quand même ».
-  - Android : `shared/popup-guard.js` est injecté **au début du document dans toutes les frames** (`preShowScriptInjectionTime: 'documentStart'` → `addDocumentStartJavaScript`). Il neutralise `window.open` (non réécrivable par la page) et bloque les calques `<a target=_blank>` et les liens `_top` vers d'autres sites. En dernier recours, les popups natives restantes sont ouvertes cachées puis fermées. Si la page principale change de site dans les 3 s qui suivent, on recharge l'épisode à la même position.
-- **Redirections « onclick » (mobile)** : sur téléphone, des régies comme *onclicka* (vue sur anime-sama) ne font pas de popup : au premier clic sur le lecteur, elles **redirigent l'onglet** (`location.replace`, ce qui efface l'épisode de l'historique). Deux protections :
-  1. le garde-fou bloque l'exécution des scripts, iframes et requêtes des régies connues (MutationObserver avant exécution pour les balises du HTML, setters `src`/`setAttribute` pour celles ajoutées par script, `fetch`/XHR/`sendBeacon`) ;
-  2. **annulation avant départ** (Navigation API, événement `navigate` annulable) : dans la page principale, une navigation vers un autre site sans geste de l'utilisateur (`userInitiated`) est annulée — **la page ne bouge pas, rien n'est rechargé**, quelle que soit la régie. Non émis par Chromium si l'initiateur est une iframe d'un autre domaine, d'où :
-  3. `models/NavigationGuard.ts` (filet natif) : un changement de site de la page principale n'est accepté que vers le site d'un **lien réellement touché** (`isTrusted`), vers l'URL ouverte par l'app, ou vers une page déjà visitée (retour). Sinon, l'épisode est rechargé à la même position avec le message « Redirection publicitaire bloquée ». Un clic sur un bouton ne compte pas (la régie se déclenche justement au clic sur ▶). Limite : une connexion OAuth lancée par un bouton est annulée dans le navigateur intégré.
-- **Régies publicitaires** (`shared/ad-hosts.json`) : bloquées pour toutes les requêtes sur PC (`webRequest`), et pour les navigations sur Android (`blockedHosts`). La liste est à compléter au fil de l'eau.
+Le piège des sites de streaming : un calque invisible sur le lecteur ouvre une popup (`window.open`), et si elle échoue, **redirige la page** vers la pub (`top.location = pub`, souvent `location.replace`, qui efface l'épisode de l'historique). La règle commune aux deux plateformes : refuser **avant le départ** toute fenêtre, et toute navigation de la page vers un autre site lancée par une iframe d'un autre site.
+
+- **PC (Electron)** : `setWindowOpenHandler` refuse toutes les fenêtres (« Popup bloquée · Ouvrir quand même » dans la barre) ; `will-navigate` + `initiator` annule les redirections lancées par une iframe ; `webRequest` bloque les régies de `shared/ad-hosts.json`.
+- **Android (GeckoView)** : uBlock Origin + `NavigationPolicy.java` (voir plus haut), grâce à `LoadRequest.triggerUri`. Aucune popup n'est créée, rien n'est rechargé.
 
 ## Compilation automatique (CI) et versions
 
@@ -124,8 +119,7 @@ pip install playwright && npm run build
 python3 tests/e2e/test_tracker.py <dossier avec page.html + clip.webm> app/shared/tracker.js   # 13 vérifications
 python3 tests/e2e/test_e2e.py                                     # appairage UI + synchro + transfert (6 vérifications)
 python3 tests/e2e/test_feedback.py <dossier> app/shared/tracker.js  # Trusted Types, pubs YouTube, DOM réécrit (7 vérifications)
-python3 tests/e2e/test_popup_guard.py app/shared/popup-guard.js  # onclicka, régie inconnue, calque Vidmoly, tab-under page/lecteur, liens _top (30 vérifications)
-npm run test:unit                                                 # NavigationGuard (13), position dans l'URL (8), agrégation des frames (4), background GeckoView (7)
+npm run test:unit                                                 # position dans l'URL (8), agrégation des frames (4), background GeckoView (7)
 python3 tests/e2e/test_gecko_ext.py app/android/app/src/main/assets/swipecast-ext/content.js tests/e2e/range-server.mjs  # extension GeckoView multi-frames (8)
 (cd app/android && ./gradlew :app:testDebugUnitTest)              # NavigationPolicy (JUnit)
 ```
@@ -133,8 +127,7 @@ python3 tests/e2e/test_gecko_ext.py app/android/app/src/main/assets/swipecast-ex
 ## Limites connues (v1)
 
 1. **Android, app tuée** : sans push, le téléphone ne reçoit rien tant que l'app est fermée. Le transfert reste en attente 2 h sur le hub et **s'affiche dès l'ouverture de l'app**. Si l'app est en arrière-plan avec la connexion encore active, la notification arrive. Solution v2 : FCM, ou un service au premier plan.
-2. **DRM (Netflix, Disney+, Prime…)** : Electron standard n'inclut pas Widevine, donc ces sites ne liront pas sur PC. Il faudrait la build [castLabs ECS](https://github.com/castlabs/electron-releases) avec signature VMP. La WebView Android, elle, gère généralement Widevine.
-3. **Iframes sur Android** : le plugin n'injecte que dans la frame principale. Les lecteurs embarqués en iframe cross-origin (certains sites de streaming) sont suivis sur PC (injection dans toutes les frames) mais pas sur Android. Dans ce cas, c'est l'URL de la page qui est transmise, sans la position.
-4. **Même réseau requis** : en 4G ou hors de chez toi, passer par Tailscale (adresse 100.x du PC) fonctionne sans changer le code.
-5. Sur Android, les pubs **affichées dans** l'iframe du lecteur (overlay, pré-roll) ne sont pas bloquées : `blockedHosts` filtre les navigations, pas chaque requête. Seuls les popups et les redirections sont bloqués.
-6. Le trafic LAN n'est pas chiffré (ws://) : seul un jeton protège l'accès. Ça suffit sur un Wi-Fi domestique, pas sur un réseau public.
+2. **DRM (Netflix, Disney+, Prime…)** : Electron standard n'inclut pas Widevine, donc ces sites ne liront pas sur PC. Il faudrait la build [castLabs ECS](https://github.com/castlabs/electron-releases) avec signature VMP. Sur Android, la lecture DRM est autorisée côté GeckoView mais n'a pas encore été testée.
+3. **Même réseau requis** : en 4G ou hors de chez toi, passer par Tailscale (adresse 100.x du PC) fonctionne sans changer le code.
+4. **Versions de pré-publication** : Capacitor 9.0.0-rc.0 et plugins officiels 9.0.0-alpha.2, à passer en version finale dès sa sortie (une seule mise à jour à la fois, validée par la CI).
+5. Le trafic LAN n'est pas chiffré (ws://) : seul un jeton protège l'accès. Ça suffit sur un Wi-Fi domestique, pas sur un réseau public.
