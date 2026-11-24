@@ -77,7 +77,7 @@ jobs:
 
       - name: APK de debug
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: swipecast-debug-apk
           path: app/android/app/build/outputs/apk/debug/*.apk
