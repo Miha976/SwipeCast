@@ -1,0 +1,20 @@
+{
+  "manifest_version": 2,
+  "name": "SwipeCast",
+  "version": "1.0",
+  "description": "Suivi de la lecture vidéo dans toutes les frames et reprise à la bonne position (intégrée à l'app SwipeCast).",
+  "browser_specific_settings": {
+    "gecko": { "id": "swipecast@miha976.dev" }
+  },
+  "permissions": ["nativeMessaging", "nativeMessagingFromContent", "geckoViewAddons", "<all_urls>"],
+  "background": { "scripts": ["background.js"] },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "all_frames": true,
+      "match_about_blank": true,
+      "run_at": "document_start",
+      "js": ["content.js"]
+    }
+  ]
+}

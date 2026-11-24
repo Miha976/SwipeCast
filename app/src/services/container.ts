@@ -5,7 +5,8 @@ import { HistoryRepository } from './HistoryRepository';
 import { createNotifications } from './NotificationService';
 import type { BrowserService } from './browser/BrowserService';
 import { ElectronBrowserService } from './browser/ElectronBrowserService';
-import { CapacitorBrowserService } from './browser/CapacitorBrowserService';
+import { GeckoBrowserService } from './browser/GeckoBrowserService';
+import { createLocalNetworkPermission } from './LocalNetworkPermission';
 import { WebFallbackBrowserService } from './browser/WebFallbackBrowserService';
 
 /** Composition des dépendances selon la plateforme (point unique où l'on choisit les implémentations). */
@@ -16,7 +17,7 @@ export function createServices() {
 
   let browser: BrowserService;
   if (platform === 'windows' && desktop) browser = new ElectronBrowserService(desktop);
-  else if (platform === 'android') browser = new CapacitorBrowserService();
+  else if (platform === 'android') browser = new GeckoBrowserService(); // moteur Firefox + uBlock Origin
   else browser = new WebFallbackBrowserService();
 
   return {
@@ -27,6 +28,7 @@ export function createServices() {
     sync: new SyncService(),
     history: new HistoryRepository(storage),
     notifications: createNotifications(platform, desktop?.focusWindow),
+    localNetwork: createLocalNetworkPermission(platform),
   };
 }
 

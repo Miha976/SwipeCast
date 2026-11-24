@@ -55,6 +55,13 @@ export class PairingViewModel extends ViewModel<PairingState> {
     const baseUrl = normalizeHubAddress(this.state.address);
     if (!baseUrl) return this.setState({ error: 'Adresse invalide (ex. 192.168.1.20:47321)' });
     this.setState({ busy: true, error: null });
+    // Android 17 : sans accès au réseau local, la requête échouerait en « PC injoignable » trompeur.
+    if ((await this.app.ensureLocalNetwork()) !== 'granted') {
+      return this.setState({
+        busy: false,
+        error: 'SwipeCast a besoin de l’accès au réseau local pour joindre ton PC. Autorise-le (bandeau en haut), puis réessaie.',
+      });
+    }
     try {
       const name = await deviceName();
       const conn = await pairWithHub(baseUrl, this.state.code, { name, platform: this.s.platform });

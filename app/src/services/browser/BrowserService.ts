@@ -2,7 +2,7 @@ import type { BrowsingState, RestoreOptions, TrackerMessage } from '../../models
 
 /**
  * Navigateur intégré avec suivi vidéo. Deux implémentations natives :
- *  - Android : @capgo/capacitor-inappbrowser (WebView native superposée, injection via executeScript)
+ *  - Android : GeckoView (moteur Firefox) piloté en natif, extension intégrée dans toutes les frames
  *  - Windows : WebContentsView Electron (injection dans toutes les frames, y compris iframes cross-origin)
  */
 export interface BrowserService {

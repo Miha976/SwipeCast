@@ -2,7 +2,7 @@
   "name": "swipecast",
   "private": true,
   "version": "0.1.0",
-  "description": "Basculer une vidéo en cours entre téléphone Android et PC Windows, sans perdre la progression.",
+  "description": "Basculer une vid\u00e9o en cours entre t\u00e9l\u00e9phone Android et PC Windows, sans perdre la progression.",
   "workspaces": [
     "server",
     "app"
@@ -16,6 +16,9 @@
     "android": "npm run android -w app",
     "dist:win": "npm run electron:dist -w app",
     "android:sync": "npm run android:sync -w app",
-    "test:unit": "tsx tests/unit/NavigationGuard.test.ts && tsx tests/unit/siteAdapters.test.ts"
+    "test:unit": "tsx tests/unit/siteAdapters.test.ts && tsx tests/unit/FrameAggregator.test.ts && node tests/unit/gecko-background.test.mjs"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }
