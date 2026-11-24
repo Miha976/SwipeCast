@@ -77,6 +77,21 @@ public class NavigationPolicyTest {
     }
 
     @Test
+    public void redirectionDesResultatsDeRecherche() {
+        // Journal réel (novembre 2026) : résultat → page de redirection de Brave → Wikipédia par script, sans geste.
+        String go = "https://search.brave.com/go/v1#AYDYHdA0Gb3gawWLBAGvL";
+        String wiki = "https://fr.wikipedia.org/wiki/H_(lettre)";
+        assertTrue(NavigationPolicy.allowTopLevel(go, BRAVE, BRAVE, false, true, false));
+        assertTrue(NavigationPolicy.allowTopLevel(wiki, go, go, false, false, false));
+        String g = "https://www.google.fr/url?q=https://fr.wikipedia.org/";
+        assertTrue(NavigationPolicy.allowTopLevel(wiki, g, g, false, false, false));
+        // ailleurs, une redirection par script sans geste reste bloquée
+        assertFalse(NavigationPolicy.allowTopLevel(CASINO, EP, EP, false, false, false));
+        // et une iframe tierce sur une page de recherche ne peut pas emmener la page ailleurs
+        assertFalse(NavigationPolicy.allowTopLevel(CASINO, VIDMOLY, BRAVE, false, false, false));
+    }
+
+    @Test
     public void moteursDeRecherche() {
         assertTrue(NavigationPolicy.isSearchEngine(BRAVE));
         assertTrue(NavigationPolicy.isSearchEngine("https://duckduckgo.com/?q=x"));

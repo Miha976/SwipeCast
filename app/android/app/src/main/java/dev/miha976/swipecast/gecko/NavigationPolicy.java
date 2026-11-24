@@ -74,6 +74,9 @@ public final class NavigationPolicy {
         if (trig == null) return true;
         // Lancée par une iframe d'un autre site (calque invisible du lecteur → top.location = pub)
         if (!trig.equals(cur)) return false;
+        // Moteur de recherche : ses résultats passent par sa propre page de redirection (Brave /go/v1#…,
+        // Google /url?q=…), qui part vers le site par script, sans geste. Ces pages ne redirigent pas vers des pubs.
+        if (isSearchEngine(currentUri)) return true;
         // Lancée par la page elle-même : seulement après un geste (lien touché). Sinon redirection par script.
         return hasUserGesture;
     }
