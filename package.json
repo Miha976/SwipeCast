@@ -16,6 +16,6 @@
     "android": "npm run android -w app",
     "dist:win": "npm run electron:dist -w app",
     "android:sync": "npm run android:sync -w app",
-    "test:unit": "tsx tests/unit/NavigationGuard.test.ts && tsx tests/unit/siteAdapters.test.ts"
+    "test:unit": "tsx tests/unit/NavigationGuard.test.ts && tsx tests/unit/siteAdapters.test.ts && tsx tests/unit/FrameAggregator.test.ts && node tests/unit/gecko-background.test.mjs"
   }
 }

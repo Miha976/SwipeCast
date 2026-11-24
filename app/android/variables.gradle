@@ -1,5 +1,5 @@
 ext {
-    minSdkVersion = 24
+    minSdkVersion = 26 // GeckoView récent : Android 8 minimum
     compileSdkVersion = 36
     targetSdkVersion = 36
     androidxActivityVersion = '1.11.0'
@@ -13,4 +13,7 @@ ext {
     androidxJunitVersion = '1.3.0'
     androidxEspressoCoreVersion = '3.7.0'
     cordovaAndroidVersion = '14.0.1'
+    // Dernière version publiée (canal release). Une fois le prototype validé, figer la version exacte
+    // affichée par ./gradlew :app:dependencies (ex. '147.0.20251120203629').
+    geckoviewVersion = '+'
 }

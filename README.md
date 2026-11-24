@@ -68,6 +68,23 @@ Fermer la fenêtre réduit l'app dans la zone de notification, pour que le hub r
 - **Recevoir** : une notification apparaît, ou une feuille « Regarder en plein écran » si l'app est ouverte. Elle reprend 3 s avant le point d'envoi (réglable).
 - **Récupérer sans envoi préalable** : la carte « Sur PC-Bureau » affiche la vidéo en cours sur l'autre appareil, avec un bouton « Reprendre ici ».
 
+## Android : navigateur GeckoView (moteur Firefox)
+
+Le navigateur intégré Android est une **GeckoView** pilotée en natif (`android/app/src/main/java/dev/miha976/swipecast/gecko/`), ce qui donne le même niveau de contrôle qu'Electron sur PC :
+
+| | Comment |
+|---|---|
+| Popups | `onLoadRequest` (cible nouvelle fenêtre) / `onNewSession` → refusées avant création ; un lien du même site touché s'ouvre dans l'onglet |
+| Redirections pub | `onLoadRequest` → refusées **avant départ** si lancées par une iframe d'un autre site (`triggerUri`) ou par script sans geste ; `onSubframeLoadRequest` → tab-under dans le lecteur refusé (`NavigationPolicy.java`, testé par JUnit) |
+| Pubs | **uBlock Origin**, installé depuis addons.mozilla.org au premier lancement |
+| Suivi vidéo | extension intégrée `app/gecko-ext/` : `shared/tracker.js` (le même que sur PC) dans **toutes les frames**, iframe du lecteur comprise ; la reprise est demandée par chaque frame à son chargement |
+| Lecture | autoplay avec le son et DRM autorisés (`PermissionDelegate`) |
+
+- `npm run android:sync` génère l'extension (`npm run gecko:ext`) puis synchronise Capacitor.
+- `minSdk` 26 (Android 8), ABI `arm64-v8a` + `x86_64`. GeckoView vient du dépôt Maven de Mozilla (`maven.mozilla.org`), version `+` à figer une fois validée.
+- Repli possible sur l'ancienne WebView : `USE_GECKO = false` dans `src/services/container.ts`.
+- Logs : `adb logcat -s SwipeCastGecko GeckoConsole`.
+
 ## Reprise de la position
 
 Deux mécanismes complémentaires :
@@ -96,7 +113,9 @@ python3 tests/e2e/test_tracker.py <dossier avec page.html + clip.webm> app/share
 python3 tests/e2e/test_e2e.py                                     # appairage UI + synchro + transfert (6 vérifications)
 python3 tests/e2e/test_feedback.py <dossier> app/shared/tracker.js  # Trusted Types, pubs YouTube, DOM réécrit (7 vérifications)
 python3 tests/e2e/test_popup_guard.py app/shared/popup-guard.js  # onclicka, régie inconnue, calque Vidmoly, tab-under page/lecteur, liens _top (30 vérifications)
-npm run test:unit                                                 # NavigationGuard (13) + position dans l'URL (8)
+npm run test:unit                                                 # NavigationGuard (13), position dans l'URL (8), agrégation des frames (4), background GeckoView (7)
+python3 tests/e2e/test_gecko_ext.py app/android/app/src/main/assets/swipecast-ext/content.js tests/e2e/range-server.mjs  # extension GeckoView multi-frames (8)
+(cd app/android && ./gradlew :app:testDebugUnitTest)              # NavigationPolicy (JUnit)
 ```
 
 ## Limites connues (v1)

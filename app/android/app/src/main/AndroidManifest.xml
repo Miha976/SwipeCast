@@ -24,6 +24,14 @@
 
         </activity>
 
+        <!-- Navigateur GeckoView (moteur Firefox) : vidéo, uBlock Origin, suivi dans toutes les frames -->
+        <activity
+            android:name=".gecko.GeckoBrowserActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:launchMode="singleTop"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

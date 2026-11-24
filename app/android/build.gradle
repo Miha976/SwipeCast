@@ -21,6 +21,8 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // GeckoView (moteur Firefox) n'est publié que sur le dépôt Maven de Mozilla
+        maven { url "https://maven.mozilla.org/maven2/" }
     }
 }
 

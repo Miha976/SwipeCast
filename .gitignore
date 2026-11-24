@@ -4,3 +4,4 @@ app/release/
 app/android/app/build/
 app/android/.gradle/
 *.log
+app/android/app/src/main/assets/swipecast-ext/
