@@ -6,9 +6,11 @@ const src = readFileSync(new URL('../../app/gecko-ext/link-guard.js', import.met
 let onClick = null;
 const window = {};
 window.top = window;
+const posted = [];
+window.__swipecastBridge = { post: (m) => posted.push(m) };
 const ctx = { window, URL, location: { href: '' }, document: { addEventListener: (t, f) => t === 'click' && (onClick = f) } };
 vm.runInNewContext(src, ctx);
-const { openHere } = window.__swipecastLinkGuard;
+const { openHere, crossSite } = window.__swipecastLinkGuard;
 
 let ok = 0, total = 0;
 const check = (n, c) => { total++; if (c) ok++; else console.log('FAIL', n); };
@@ -29,8 +31,14 @@ const a = { href: EP, target: '_blank' };
 const ev = (trusted) => ({ isTrusted: trusted, defaultPrevented: false, button: 0, target: { closest: () => a } });
 onClick(ev(false));
 check('clic simulé par script : ignoré', a.target === '_blank');
+check('clic simulé : aucun signal au natif', posted.length === 0);
 onClick(ev(true));
 check('vrai tap : le lien passe en _self', a.target === '_self');
+check('vrai tap vers un autre site : signal userNav', posted.length === 1 && posted[0].type === 'userNav' && posted[0].url === EP && posted[0].page === BRAVE);
+ctx.location.href = EP;
+onClick({ ...ev(true), target: { closest: () => ({ href: 'https://anime-sama.to/planning', target: '' }) } });
+check('lien du même site : pas de signal (déjà autorisé)', posted.length === 1);
+check('crossSite', crossSite(BRAVE, EP) && !crossSite(EP, 'https://www.anime-sama.to/x') && !crossSite(BRAVE, 'intent://x'));
 
 const frame = {}; frame.top = {};
 let frameListener = null;

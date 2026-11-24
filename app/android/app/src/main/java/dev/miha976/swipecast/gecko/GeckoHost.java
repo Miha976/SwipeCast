@@ -1,6 +1,9 @@
 package dev.miha976.swipecast.gecko;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -172,10 +175,67 @@ public final class GeckoHost {
         @Nullable
         @Override
         public GeckoResult<Object> onMessage(@NonNull String nativeApp, @NonNull Object message, @NonNull WebExtension.MessageSender sender) {
-            if (message instanceof JSONObject && listener != null) listener.onTrackerMessage((JSONObject) message);
+            if (!(message instanceof JSONObject)) return null;
+            JSONObject m = (JSONObject) message;
+            if ("userNav".equals(m.optString("type"))) {
+                // Tap réel sur un lien (event.isTrusted, monde isolé : la page ne peut pas l'imiter).
+                // Seulement la page principale : les liens des iframes (pubs du lecteur) ne comptent pas.
+                if (sender.isTopLevel()) onUserTap(m.optString("url"), m.optString("page"));
+                return null;
+            }
+            if (listener != null) listener.onTrackerMessage(m);
             return null;
         }
     };
+
+    // ------------------------------------------------------------------ taps réels (remplacent hasUserGesture)
+
+    /** Attente maximale du signal de tap pour une navigation vers un autre site. */
+    private static final long TAP_WAIT_MS = 450;
+    private final UserTaps userTaps = new UserTaps();
+    private final Handler main = new Handler(Looper.getMainLooper());
+
+    private static final class PendingNav {
+        final String uri, current;
+        final GeckoResult<AllowOrDeny> result = new GeckoResult<>();
+        boolean done;
+
+        PendingNav(String uri, String current) {
+            this.uri = uri;
+            this.current = current;
+        }
+    }
+
+    private final List<PendingNav> pendingNavs = new ArrayList<>();
+
+    private void onUserTap(String url, String page) {
+        long now = SystemClock.uptimeMillis();
+        userTaps.record(url, page, now);
+        // La navigation a pu arriver avant le message : on la débloque.
+        for (PendingNav p : new ArrayList<>(pendingNavs)) {
+            if (!p.done && userTaps.consume(p.uri, p.current, now)) {
+                p.done = true;
+                pendingNavs.remove(p);
+                p.result.complete(AllowOrDeny.ALLOW);
+            }
+        }
+    }
+
+    /** Navigation que la règle refuserait faute de geste connu : autorisée si un tap réel la justifie. */
+    private GeckoResult<AllowOrDeny> allowIfTapped(String uri, String trigger, String current) {
+        if (userTaps.consume(uri, current, SystemClock.uptimeMillis())) return GeckoResult.allow();
+        PendingNav p = new PendingNav(uri, current);
+        pendingNavs.add(p);
+        main.postDelayed(() -> {
+            if (p.done) return;
+            p.done = true;
+            pendingNavs.remove(p);
+            Log.i(TAG, "redirection annulée : " + uri + " (depuis " + trigger + ")");
+            blocked(null, "🚫 Redirection publicitaire bloquée");
+            p.result.complete(AllowOrDeny.DENY);
+        }, TAP_WAIT_MS);
+        return p.result;
+    }
 
     private void attachContentDelegate() {
         if (extension != null && session != null) {
@@ -308,11 +368,13 @@ public final class GeckoHost {
                 r.hasUserGesture,
                 r.isDirectNavigation
             );
-            if (!ok) {
-                Log.i(TAG, "redirection annulée : " + r.uri + " (depuis " + r.triggerUri + ")");
-                blocked(null, "🚫 Redirection publicitaire bloquée");
-            }
-            return ok ? GeckoResult.allow() : GeckoResult.deny();
+            if (ok) return GeckoResult.allow();
+            // Lancée depuis la page sans geste connu : GeckoView ne le transmet pas pour un autre site.
+            // Si l'utilisateur vient de toucher ce lien, on laisse passer ; sinon c'est une redirection par script.
+            if (NavigationPolicy.sameSite(r.triggerUri, currentUri)) return allowIfTapped(r.uri, r.triggerUri, currentUri);
+            Log.i(TAG, "redirection annulée : " + r.uri + " (depuis " + r.triggerUri + ")");
+            blocked(null, "🚫 Redirection publicitaire bloquée");
+            return GeckoResult.deny();
         }
 
         @Nullable

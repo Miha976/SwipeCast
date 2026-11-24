@@ -1,10 +1,14 @@
-/* ---- liens target=_blank : ouverts dans l'onglet courant quand c'est légitime ----
+/* ---- liens touchés : ouverture dans l'onglet + signal « tap réel » pour le natif ----
  * GeckoView ne donne pas le geste utilisateur pour une demande de nouvelle fenêtre (hasUserGesture est
  * lu sur la fenêtre interne du navigateur, toujours faux) : le natif ne peut pas distinguer un lien
  * touché d'un popup publicitaire. Ici, dans la page, on voit le vrai tap (event.isTrusted) :
  *  - résultat touché sur un moteur de recherche → ouvert ici (Brave Search ouvre ses résultats en _blank) ;
  *  - lien du même site touché → ouvert ici.
  * Les liens _blank vers un autre site depuis un site quelconque restent bloqués par le natif (popups pub).
+ *
+ * Pour la même raison, une navigation vers un AUTRE site arrive au natif sans geste (changement de
+ * processus) et serait prise pour une redirection pub : on lui signale le tap réel (message « userNav »),
+ * qu'il attend brièvement avant de décider (GeckoHost.allowIfTapped).
  */
 (function () {
   'use strict';
@@ -22,6 +26,16 @@
   function isSearchEngine(u) {
     return SEARCH_HOSTS.indexOf(u.hostname) >= 0 || /^www\.google\.[a-z]{2,3}(\.[a-z]{2})?$/.test(u.hostname);
   }
+  /** Lien vers un autre site (http/https) : le natif doit être prévenu du tap. (fonction pure, testée) */
+  function crossSite(pageHref, linkHref) {
+    try {
+      var page = new URL(pageHref), link = new URL(linkHref, pageHref);
+      return /^https?:$/.test(link.protocol) && baseDomain(link.hostname) !== baseDomain(page.hostname);
+    } catch (e) {
+      return false;
+    }
+  }
+
   /** Ouvrir ce lien dans l'onglet courant ? (fonction pure, testée) */
   function openHere(pageHref, linkHref, target) {
     var t = String(target || '').toLowerCase();
@@ -42,11 +56,14 @@
     function (e) {
       if (!e.isTrusted || e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
       var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
-      if (!a || !openHere(location.href, a.href, a.target)) return;
-      a.target = '_self'; // navigation normale de l'onglet, avec le geste de l'utilisateur
+      if (!a) return;
+      if (openHere(location.href, a.href, a.target)) a.target = '_self'; // navigation normale de l'onglet
+      if (crossSite(location.href, a.href) && window.__swipecastBridge) {
+        window.__swipecastBridge.post({ type: 'userNav', url: a.href, page: location.href });
+      }
     },
     true, // phase de capture : avant que le lien ne soit suivi
   );
 
-  window.__swipecastLinkGuard = { openHere: openHere };
+  window.__swipecastLinkGuard = { openHere: openHere, crossSite: crossSite };
 })();
