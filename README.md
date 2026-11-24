@@ -22,7 +22,9 @@ Basculer une vidéo en cours entre **téléphone Android** et **PC Windows** san
 
 Le backend est en **Node.js** plutôt qu'en Python : Electron l'exécute nativement, donc pas de runtime Python à embarquer sur Windows.
 
-**Appairage** : le PC affiche son adresse et un code à 6 chiffres (usage unique, 5 essais puis blocage 60 s). Le téléphone l'échange contre un jeton permanent de 256 bits.
+**Appairage** : le PC affiche un code à 6 chiffres (usage unique, 5 essais puis blocage 60 s). Le téléphone l'échange contre un jeton permanent de 256 bits.
+
+**Découverte réseau** : le hub a une identité stable (`hubId`, conservée dans ses données) et s'annonce en mDNS / DNS-SD (`_swipecast._tcp`, enregistrement TXT `id`, `name`). Le téléphone cherche le PC de deux façons en parallèle : mDNS via `NsdManager`, et un scan HTTP de `/health` sur son /24, utile quand le multicast est filtré (pare-feu Windows en profil « Public », isolation client, certains partages de connexion). L'adresse reste saisissable à la main. Une fois appairé, le téléphone mémorise l'identité du PC plutôt que seulement son IP : si le PC devient injoignable, il le recherche (au plus une fois toutes les 30 s) et met l'adresse à jour sans réappairage. Il ne suit que l'identité appairée, jamais un autre PC SwipeCast du réseau.
 
 ## Structure
 
@@ -58,7 +60,7 @@ npm run dist:win           # → app/release/SwipeCast Setup x.y.z.exe
 npm run android            # build + cap sync + ouverture dans Android Studio
 ```
 
-Au premier lancement sur le PC, **autorise SwipeCast dans le pare-feu Windows (réseaux privés)**, sinon le téléphone ne pourra pas se connecter. Ensuite, dans l'app PC, ouvre **Réglages → Appairage** et saisis l'adresse et le code affichés sur le téléphone.
+Au premier lancement sur le PC, **autorise SwipeCast dans le pare-feu Windows (réseaux privés)**, sinon le téléphone ne pourra pas se connecter. Ensuite, dans l'app PC, ouvre **Réglages → Appairage** : sur le téléphone, le PC apparaît dans la liste « PC sur le réseau » ; choisis-le et saisis le code affiché (l'adresse reste saisissable à la main si besoin).
 
 Fermer la fenêtre réduit l'app dans la zone de notification, pour que le hub reste joignable. Le menu de l'icône permet d'activer le lancement au démarrage de Windows.
 
@@ -114,7 +116,7 @@ Pour éviter les conflits de versions :
 ## Tests
 
 ```bash
-npm test                                                          # hub : appairage, transfert en ligne/hors ligne, validation
+npm test                                                          # hub : appairage, transfert, identité stable, annonce mDNS réelle
 pip install playwright && npm run build
 python3 tests/e2e/test_tracker.py <dossier avec page.html + clip.webm> app/shared/tracker.js   # 13 vérifications
 python3 tests/e2e/test_e2e.py                                     # appairage UI + synchro + transfert (6 vérifications)

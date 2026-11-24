@@ -1,5 +1,6 @@
 import { registerPlugin, type PluginListenerHandle } from '@capacitor/core';
 import type { BrowsingState, RestoreOptions, TrackerMessage } from '../../models/types';
+import type { FoundHub } from '../../models/hubs';
 
 /** granted | prompt | prompt-with-rationale | denied (denied = Android ne reproposera plus la demande) */
 export type PermissionStatus = 'granted' | 'prompt' | 'prompt-with-rationale' | 'denied';
@@ -17,6 +18,9 @@ export interface SwipecastGeckoPlugin {
   checkLocalNetwork(): Promise<{ state: PermissionStatus }>;
   requestLocalNetwork(): Promise<{ state: PermissionStatus }>;
   openAppSettings(): Promise<void>;
+  /** mDNS + scan du /24 ; rejette avec le code BUSY si une recherche est déjà en cours */
+  discover(options?: { port?: number; timeoutMs?: number }): Promise<{ hubs: FoundHub[] }>;
+  addListener(event: 'hubFound', cb: (h: FoundHub) => void): Promise<PluginListenerHandle>;
   addListener(event: 'message', cb: (m: TrackerMessage & { frame?: string }) => void): Promise<PluginListenerHandle>;
   addListener(event: 'state', cb: (s: BrowsingState | { closed: true }) => void): Promise<PluginListenerHandle>;
   addListener(event: 'popupBlocked', cb: (p: { url?: string }) => void): Promise<PluginListenerHandle>;

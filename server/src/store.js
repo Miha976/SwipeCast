@@ -18,6 +18,11 @@ export class Store {
     } catch {
       /* premier lancement */
     }
+    // Identité stable du hub : le téléphone retrouve « son » PC par cet id, même si l'IP change.
+    if (!this.state.hubId) {
+      this.state.hubId = randomUUID();
+      this.flush();
+    }
     this.pairingCode = String(randomInt(0, 1_000_000)).padStart(6, '0');
     this._timer = null;
   }

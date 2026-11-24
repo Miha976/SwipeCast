@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, type FormEvent } from 'react';
 import { useViewModel } from '../../core/ViewModel';
 import { PairingViewModel } from '../../viewmodels/PairingViewModel';
 import type { AppViewModel } from '../../viewmodels/AppViewModel';
@@ -10,6 +10,7 @@ export function PairingPage({ services, app }: { services: Services; app: AppVie
   const vm = useMemo(() => new PairingViewModel(services, app), [services, app]);
   const st = useViewModel(vm);
   const appState = useViewModel(app);
+  const codeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void vm.init();
@@ -24,9 +25,10 @@ export function PairingPage({ services, app }: { services: Services; app: AppVie
         <section className="card">
           <h2 className="mb-1 text-2xl">Appairer un téléphone</h2>
           <p className="mb-6 text-ink-400">
-            Ouvre SwipeCast sur ton téléphone (même Wi-Fi) et saisis ces informations.
+            Ouvre SwipeCast sur ton téléphone (même Wi-Fi ou partage de connexion) : ce PC y apparaît tout seul.
+            Saisis ensuite le code ci-dessous.
           </p>
-          <span className="label">Adresse du PC</span>
+          <span className="label">Adresse du PC (si le téléphone ne le trouve pas)</span>
           <div className="mb-5 flex flex-col gap-2">
             {st.hub.addresses.length ? (
               st.hub.addresses.map((a) => (
@@ -76,12 +78,64 @@ export function PairingPage({ services, app }: { services: Services; app: AppVie
     <section className="card mx-auto w-full max-w-lg">
       <h2 className="mb-1 text-2xl">Connecter ton PC</h2>
       <p className="mb-6 text-ink-400">
-        Sur le PC, ouvre SwipeCast → <strong className="text-ink-200">Appairage</strong>. Recopie l’adresse et le code affichés.
+        Sur le PC, ouvre SwipeCast → <strong className="text-ink-200">Appairage</strong>.{' '}
+        {vm.discoverySupported ? 'Choisis-le ci-dessous, puis saisis le code affiché.' : 'Recopie l’adresse et le code affichés.'}
       </p>
       <form onSubmit={submit} className="flex flex-col gap-5">
+        {vm.discoverySupported && (
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <span className="label mb-0">PC sur le réseau</span>
+              <button
+                type="button"
+                className="btn btn-ghost h-9 min-h-0 shrink-0 px-3 text-sm"
+                onClick={() => void vm.search()}
+                disabled={st.searching}
+              >
+                {st.searching ? 'Recherche…' : 'Rechercher'}
+              </button>
+            </div>
+            <ul className="flex flex-col gap-2" aria-live="polite">
+              {st.found.map((h) => {
+                const selected = st.selectedHubId === h.id;
+                return (
+                  <li key={h.id} className="min-w-0">
+                    <button
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => {
+                        vm.selectHub(h);
+                        codeRef.current?.focus();
+                      }}
+                      className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition ${
+                        selected ? 'border-brand bg-brand/15' : 'border-white/10 bg-white/[.03] hover:bg-white/[.07]'
+                      }`}
+                    >
+                      <PlatformIcon platform="windows" className={`h-6 w-6 shrink-0 ${selected ? 'text-brand-soft' : 'text-ink-400'}`} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold text-white">{h.name}</span>
+                        <span className="block truncate text-sm text-ink-400">
+                          {h.host}:{h.port}
+                        </span>
+                      </span>
+                      {selected && <span className="shrink-0 text-sm font-semibold text-brand-soft">Choisi</span>}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {st.found.length === 0 && (
+              <p className="rounded-2xl border border-dashed border-white/10 p-4 text-center text-ink-400">
+                {st.searching
+                  ? 'Recherche de ton PC sur le réseau…'
+                  : 'Aucun PC trouvé. Vérifie que SwipeCast est ouvert sur le PC et que vous êtes sur le même réseau, ou saisis son adresse.'}
+              </p>
+            )}
+          </div>
+        )}
         <div>
           <label className="label" htmlFor="addr">
-            Adresse du PC
+            {vm.discoverySupported ? 'Ou adresse du PC' : 'Adresse du PC'}
           </label>
           <input
             id="addr"
@@ -100,6 +154,7 @@ export function PairingPage({ services, app }: { services: Services; app: AppVie
           </label>
           <input
             id="code"
+            ref={codeRef}
             className="input text-center text-3xl font-bold tracking-[.4em] tabular-nums"
             inputMode="numeric"
             autoComplete="one-time-code"

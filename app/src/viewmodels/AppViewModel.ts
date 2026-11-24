@@ -18,6 +18,8 @@ import type { Services } from '../services/container';
 import type { SyncStatus } from '../services/SyncService';
 import { StorageKeys } from '../services/StorageService';
 import type { PermissionStatus } from '../services/LocalNetworkPermission';
+import { relocateConnection } from '../models/hubs';
+import { fetchHubIdentity } from '../services/PairingService';
 
 export interface AppState {
   ready: boolean;
@@ -54,6 +56,8 @@ export class AppViewModel extends ViewModel<AppState> {
   private snackTimer: ReturnType<typeof setTimeout> | null = null;
   private initStarted = false;
   private popupTimer: ReturnType<typeof setTimeout> | null = null;
+  private relocating = false;
+  private lastRelocation = 0;
 
   constructor(private s: Services) {
     super({
@@ -82,7 +86,13 @@ export class AppViewModel extends ViewModel<AppState> {
     this.initStarted = true;
     const { sync, browser, notifications, storage, history } = this.s;
 
-    this.track(sync.on('status', (status) => this.setState({ status })));
+    this.track(
+      sync.on('status', (status) => {
+        this.setState({ status });
+        if (status === 'online') void this.learnHubIdentity();
+        if (status === 'offline') void this.relocateHub();
+      }),
+    );
     this.track(sync.on('message', (m) => this.onServerMessage(m)));
     this.track(browser.onMessage((m) => this.onTrackerMessage(m)));
     this.track(
@@ -163,6 +173,55 @@ export class AppViewModel extends ViewModel<AppState> {
       return;
     }
     await this.ensureLocalNetwork();
+  }
+
+  // ------------------------------------------------------------ PC retrouvé quand son IP change
+  /** Délai minimal entre deux recherches automatiques (chaque recherche sonde ~250 adresses). */
+  static readonly RELOCATE_INTERVAL_MS = 30_000;
+
+  /**
+   * PC injoignable : on le cherche sur le réseau par son identité (mDNS + scan). S'il a changé
+   * d'adresse (partage de connexion, nouveau bail DHCP), la connexion est mise à jour sans réappairage.
+   */
+  async relocateHub(): Promise<void> {
+    const conn = this.state.connection;
+    const now = Date.now();
+    if (
+      !conn?.hubId ||
+      this.s.desktop ||
+      !this.s.discovery.supported ||
+      this.relocating ||
+      now - this.lastRelocation < AppViewModel.RELOCATE_INTERVAL_MS ||
+      this.state.localNetwork !== 'granted'
+    ) {
+      return;
+    }
+    this.relocating = true;
+    this.lastRelocation = now;
+    try {
+      const next = relocateConnection(conn, await this.s.discovery.discover(undefined, 3000));
+      // L'utilisateur a pu oublier ou changer de PC pendant la recherche.
+      if (!next || this.state.connection !== conn || this.s.sync.status === 'online') return;
+      await this.s.storage.set(StorageKeys.connection, next);
+      this.setState({ connection: next });
+      this.s.sync.connect(next);
+      this.flash(`${next.hubName || 'PC'} retrouvé à une nouvelle adresse`, 'ok');
+    } catch (e) {
+      console.warn('découverte', e);
+    } finally {
+      this.relocating = false;
+    }
+  }
+
+  /** Appairages antérieurs à la découverte : on enregistre l'identité du PC dès qu'il répond. */
+  private async learnHubIdentity(): Promise<void> {
+    const conn = this.state.connection;
+    if (!conn || conn.hubId || this.s.desktop) return;
+    const id = await fetchHubIdentity(conn.baseUrl);
+    if (!id || this.state.connection !== conn) return;
+    const next = { ...conn, hubId: id.id, hubName: id.name };
+    await this.s.storage.set(StorageKeys.connection, next);
+    this.setState({ connection: next });
   }
 
   // ------------------------------------------------------------ appairage

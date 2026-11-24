@@ -32,6 +32,9 @@ export interface Connection {
   baseUrl: string; // ex. http://192.168.1.20:47321
   token: string;
   deviceId: string;
+  /** identité stable du PC : permet de le retrouver par découverte quand son IP change */
+  hubId?: string;
+  hubName?: string;
 }
 
 export type ServerMessage =

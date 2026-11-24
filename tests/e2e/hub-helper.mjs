@@ -2,10 +2,10 @@
 import { createRequire } from 'node:module';
 import { mkdtempSync } from 'node:fs'; import { tmpdir } from 'node:os'; import { join } from 'node:path';
 import readline from 'node:readline';
-const require = createRequire('../../server/package.json');
+const require = createRequire(new URL('../../server/package.json', import.meta.url));
 const WebSocket = require('ws');
 const { createSwipecastServer } = await import('../../server/src/server.js');
-const hub = createSwipecastServer({ port: 0, host: '127.0.0.1', dataDir: mkdtempSync(join(tmpdir(), 'hub-')), log: () => {} });
+const hub = createSwipecastServer({ port: 0, host: '127.0.0.1', dataDir: mkdtempSync(join(tmpdir(), 'hub-')), log: () => {}, advertise: false });
 await hub.start();
 const pc = hub.localDevice('PC-Bureau');
 const ws = new WebSocket(`ws://127.0.0.1:${hub.port}/ws?token=${pc.token}`);

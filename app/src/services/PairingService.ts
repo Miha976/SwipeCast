@@ -21,9 +21,26 @@ export async function pairWithHub(
       'PC injoignable. Vérifie que SwipeCast est ouvert sur le PC et que les deux appareils sont sur le même Wi-Fi.',
     );
   }
-  const data = (await res.json().catch(() => ({}))) as { token?: string; deviceId?: string; error?: string };
+  const data = (await res.json().catch(() => ({}))) as {
+    token?: string;
+    deviceId?: string;
+    hubId?: string;
+    hubName?: string;
+    error?: string;
+  };
   if (!res.ok || !data.token || !data.deviceId) {
     throw new PairingError(data.error ?? `Erreur ${res.status}`);
   }
-  return { baseUrl, token: data.token, deviceId: data.deviceId };
+  return { baseUrl, token: data.token, deviceId: data.deviceId, hubId: data.hubId, hubName: data.hubName };
+}
+
+/** Identité du hub (pour les appairages faits avant la découverte réseau, qui ne l'ont pas enregistrée). */
+export async function fetchHubIdentity(baseUrl: string): Promise<{ id: string; name: string } | null> {
+  try {
+    const r = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(3000) });
+    const d = (await r.json()) as { app?: string; id?: string; name?: string };
+    return d.app === 'swipecast' && d.id ? { id: d.id, name: d.name ?? '' } : null;
+  } catch {
+    return null;
+  }
 }

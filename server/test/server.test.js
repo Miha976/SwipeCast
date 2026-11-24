@@ -35,7 +35,7 @@ function connect(port, token) {
 const session = { url: 'https://example.com/video', title: 'Film', currentTime: 754.2, duration: 5400, paused: true };
 
 test('appairage, progression live, handoff en ligne et hors ligne', async () => {
-  const server = createSwipecastServer({ port: 0, host: '127.0.0.1', dataDir: mkdtempSync(join(tmpdir(), 'sc-')), log: quiet });
+  const server = createSwipecastServer({ port: 0, host: '127.0.0.1', dataDir: mkdtempSync(join(tmpdir(), 'sc-')), log: quiet, advertise: false });
   await server.start();
   const base = `http://127.0.0.1:${server.port}`;
 

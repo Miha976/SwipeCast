@@ -3,6 +3,7 @@ import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { Store } from './store.js';
+import { advertise as advertiseMdns } from './mdns.js';
 import { sanitizeSession } from './protocol.js';
 
 export { sanitizeSession } from './protocol.js';
@@ -11,10 +12,21 @@ export { sanitizeSession } from './protocol.js';
  * Hub SwipeCast : tourne sur le PC Windows (intégré au processus Electron, ou seul via `npm run server`).
  * Le téléphone s'y connecte en WebSocket sur le réseau local.
  *
- * @param {{ port?: number, host?: string, dataDir: string, log?: (...a: any[]) => void }} opts
+ * @param {{ port?: number, host?: string, dataDir: string, name?: string, advertise?: boolean,
+ *           log?: (...a: any[]) => void }} opts  advertise : annonce mDNS (_swipecast._tcp) pour la découverte.
  */
-export function createSwipecastServer({ port = 47321, host = '0.0.0.0', dataDir, log = console.log }) {
+export function createSwipecastServer({
+  port = 47321,
+  host = '0.0.0.0',
+  dataDir,
+  name = os.hostname(),
+  advertise = true,
+  log = console.log,
+}) {
   const store = new Store(dataDir);
+  const hubName = String(name).slice(0, 60);
+  /** @type {null | { stop: () => Promise<void> }} */
+  let announcer = null;
   /** @type {Map<string, Set<import('ws').WebSocket>>} deviceId → sockets */
   const sockets = new Map();
   const failedPairing = { count: 0, lockedUntil: 0 };
@@ -60,7 +72,7 @@ export function createSwipecastServer({ port = 47321, host = '0.0.0.0', dataDir,
     if (req.method === 'OPTIONS') return res.writeHead(204).end();
 
     if (req.method === 'GET' && req.url === '/health') {
-      return json(200, { ok: true, app: 'swipecast', version: 1 });
+      return json(200, { ok: true, app: 'swipecast', version: 1, id: store.state.hubId, name: hubName });
     }
 
     if (req.method === 'POST' && req.url === '/pair') {
@@ -87,7 +99,7 @@ export function createSwipecastServer({ port = 47321, host = '0.0.0.0', dataDir,
       events.onPairingCodeChanged?.(store.pairingCode);
       log(`[swipecast] appareil appairé : ${body.name} (${body.platform})`);
       broadcast({ type: 'devices', devices: deviceList() });
-      return json(200, { deviceId, token });
+      return json(200, { deviceId, token, hubId: store.state.hubId, hubName });
     }
 
     json(404, { error: 'not found' });
@@ -217,6 +229,9 @@ export function createSwipecastServer({ port = 47321, host = '0.0.0.0', dataDir,
     get pairingCode() {
       return store.pairingCode;
     },
+    get hubId() {
+      return store.state.hubId;
+    },
     get port() {
       return httpServer.address()?.port ?? port;
     },
@@ -247,12 +262,22 @@ export function createSwipecastServer({ port = 47321, host = '0.0.0.0', dataDir,
         httpServer.once('error', reject);
         httpServer.listen(port, host, () => {
           log(`[swipecast] hub à l'écoute sur ${host}:${httpServer.address().port}`);
+          if (advertise) {
+            try {
+              announcer = advertiseMdns({ id: store.state.hubId, name: hubName, port: httpServer.address().port, log });
+            } catch (e) {
+              // Pas bloquant : le téléphone peut encore scanner le réseau ou saisir l'adresse.
+              log(`[swipecast] annonce mDNS impossible : ${e.message}`);
+            }
+          }
           resolve();
         });
       }),
     stop: () =>
       new Promise((resolve) => {
         clearInterval(heartbeat);
+        announcer?.stop().catch(() => {});
+        announcer = null;
         for (const ws of wss.clients) ws.terminate();
         store.flush();
         httpServer.close(() => resolve());

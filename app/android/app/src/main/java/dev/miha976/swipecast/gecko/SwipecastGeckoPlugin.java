@@ -7,6 +7,7 @@ import android.provider.Settings;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -15,6 +16,9 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import dev.miha976.swipecast.discovery.HubDiscovery;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -22,9 +26,9 @@ import org.json.JSONObject;
  * Pont Capacitor ↔ navigateur GeckoView (utilisé par src/services/browser/GeckoBrowserService.ts).
  *
  * Méthodes : open({url, restore?}), close(), back(), pause(), toast({text})
- *           checkLocalNetwork(), requestLocalNetwork(), openAppSettings()
+ *           checkLocalNetwork(), requestLocalNetwork(), openAppSettings(), discover({port?, timeoutMs?})
  * Événements : message (état du script de suivi d'une frame), state ({url,title,canGoBack} | {closed:true}),
- *              popupBlocked ({url?})
+ *              popupBlocked ({url?}), hubFound ({id,name,host,port,via}) pendant discover()
  *
  * Réseau local (Android 17) : une app qui cible l'API 37 n'accède plus au réseau local sans la
  * permission d'exécution ACCESS_LOCAL_NETWORK (groupe « Appareils à proximité »). Sans elle, le hub
@@ -132,6 +136,48 @@ public class SwipecastGeckoPlugin extends Plugin implements GeckoHost.Listener {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         getContext().startActivity(intent);
         call.resolve();
+    }
+
+    // ------------------------------------------------------------------ découverte du PC
+
+    private final AtomicBoolean discovering = new AtomicBoolean(false);
+
+    /**
+     * Cherche les hubs du réseau local (mDNS + scan du /24) pendant timeoutMs.
+     * Émet « hubFound » dès qu'un hub répond, puis résout avec la liste complète.
+     */
+    @PluginMethod
+    public void discover(PluginCall call) {
+        if (!discovering.compareAndSet(false, true)) {
+            call.reject("Recherche déjà en cours", "BUSY");
+            return;
+        }
+        int port = call.getInt("port", 47321);
+        long timeout = Math.max(500, Math.min(10_000, call.getInt("timeoutMs", 3000)));
+        new Thread(() -> {
+            try {
+                List<HubDiscovery.Hub> hubs = new HubDiscovery(getContext(), port, hub -> notifyListeners("hubFound", toJs(hub))).run(timeout);
+                JSArray arr = new JSArray();
+                for (HubDiscovery.Hub h : hubs) arr.put(toJs(h));
+                JSObject r = new JSObject();
+                r.put("hubs", arr);
+                call.resolve(r);
+            } catch (Exception e) {
+                call.reject("Recherche impossible : " + e.getMessage());
+            } finally {
+                discovering.set(false);
+            }
+        }, "swipecast-discovery").start();
+    }
+
+    private static JSObject toJs(HubDiscovery.Hub h) {
+        JSObject o = new JSObject();
+        o.put("id", h.id);
+        o.put("name", h.name);
+        o.put("host", h.host);
+        o.put("port", h.port);
+        o.put("via", h.via);
+        return o;
     }
 
     // ------------------------------------------------------------------ GeckoHost.Listener
