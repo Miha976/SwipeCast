@@ -1,6 +1,7 @@
 ext {
     minSdkVersion = 26 // GeckoView récent : Android 8 minimum
     compileSdkVersion = 37
+    compileSdkMinorVersion = 2 // exigé par GeckoView 160 (API 37.2)
     targetSdkVersion = 37
     androidxActivityVersion = '1.13.0'
     androidxAppCompatVersion = '1.8.0'

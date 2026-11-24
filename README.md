@@ -106,6 +106,15 @@ Le script est compatible **Trusted Types** (CSP de YouTube) : aucune affectation
   3. `models/NavigationGuard.ts` (filet natif) : un changement de site de la page principale n'est accepté que vers le site d'un **lien réellement touché** (`isTrusted`), vers l'URL ouverte par l'app, ou vers une page déjà visitée (retour). Sinon, l'épisode est rechargé à la même position avec le message « Redirection publicitaire bloquée ». Un clic sur un bouton ne compte pas (la régie se déclenche justement au clic sur ▶). Limite : une connexion OAuth lancée par un bouton est annulée dans le navigateur intégré.
 - **Régies publicitaires** (`shared/ad-hosts.json`) : bloquées pour toutes les requêtes sur PC (`webRequest`), et pour les navigations sur Android (`blockedHosts`). La liste est à compléter au fil de l'eau.
 
+## Compilation automatique (CI) et versions
+
+`.github/workflows/build.yml` compile à chaque push sur `main` / `geckoview` : tests et build web, puis Android (sync Capacitor, extension GeckoView, `assembleDebug`, tests JUnit). En cas d'échec, les erreurs Gradle apparaissent en annotations ; en cas de succès, l'**APK de debug** est téléchargeable dans l'onglet *Actions* du run (artefact `swipecast-debug-apk`), installable sans Android Studio.
+
+Pour éviter les conflits de versions :
+- **versions exactes** : Capacitor (`app/package.json`, sans `^` ni tag `next`), GeckoView (`variables.gradle`), AGP et Gradle (`build.gradle`, `gradle-wrapper.properties`) ;
+- installer avec **`npm ci`** (respecte `package-lock.json`), pas `npm install` ;
+- une mise à jour = une seule dépendance à la fois, validée par la CI avant de toucher au poste local.
+
 ## Tests
 
 ```bash

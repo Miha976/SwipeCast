@@ -1,0 +1,84 @@
+# Compilation automatique à chaque push : web (tests + build) et Android (APK de debug).
+# Les erreurs Gradle sont remontées en annotations (lisibles dans l'onglet Actions et via l'API),
+# l'APK de debug est publié en artefact : installable sans Android Studio.
+name: build
+
+on:
+  push:
+    branches: [main, geckoview]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: true
+
+env:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1' # inutile ici, évite ~100 Mo
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Tests (hub + unitaires)
+        run: npm test && npm run test:unit
+      - name: Build front
+        run: npm run build -w app
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Licences SDK Android (SDK préinstallé sur le runner ; AGP télécharge les plateformes manquantes)
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+      - uses: gradle/actions/setup-gradle@v5
+
+      - run: npm ci
+      - name: Sync Capacitor (+ extension GeckoView)
+        run: npm run android:sync
+
+      - name: Gradle assembleDebug + tests JUnit
+        working-directory: app/android
+        run: |
+          chmod +x gradlew
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace assembleDebug testDebugUnitTest 2>&1 | tee "$RUNNER_TEMP/gradle.log"
+
+      - name: Erreurs Gradle → annotations
+        if: failure()
+        run: |
+          LOG="$RUNNER_TEMP/gradle.log"
+          [ -f "$LOG" ] || exit 0
+          # Une annotation par erreur pertinente (compilation Java, métadonnées AAR, « What went wrong »)
+          grep -nE "error:|e: |FAILURE|What went wrong|requires|Could not|> " "$LOG" | head -40 | while IFS= read -r line; do
+            echo "::error title=Gradle::${line//%/%25}"
+          done
+          {
+            echo '### Gradle — échec'
+            echo '```'
+            grep -A25 "What went wrong" "$LOG" | head -80
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: APK de debug
+        if: success()
+        uses: actions/upload-artifact@v5
+        with:
+          name: swipecast-debug-apk
+          path: app/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 14
