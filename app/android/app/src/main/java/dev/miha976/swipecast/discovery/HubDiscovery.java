@@ -21,6 +21,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.json.JSONObject;
@@ -66,7 +67,13 @@ public final class HubDiscovery {
     private final ConcurrentHashMap<String, Hub> found = new ConcurrentHashMap<>();
     private final Set<String> probed = ConcurrentHashMap.newKeySet();
     private final ExecutorService probes = Executors.newFixedThreadPool(48);
-    private final ExecutorService nsdExecutor = Executors.newSingleThreadExecutor();
+    /**
+     * Exécuteur des rappels NsdManager : exécution directe, JAMAIS arrêté. La désinscription des
+     * rappels est asynchrone ; Android y livre encore des événements après la fin de la recherche.
+     * Un exécuteur arrêté les rejetterait (RejectedExecutionException sur un thread système →
+     * fermeture de l'app). Les rappels ne font que soumettre une sonde : rien de bloquant.
+     */
+    private static final Executor NSD_CALLBACKS = Runnable::run;
     private volatile boolean finished;
 
     public HubDiscovery(@NonNull Context context, int port, @NonNull Listener listener) {
@@ -89,7 +96,6 @@ public final class HubDiscovery {
         finished = true;
         nsd.stop();
         probes.shutdownNow();
-        nsdExecutor.shutdownNow();
         return new ArrayList<>(found.values());
     }
 
@@ -190,13 +196,17 @@ public final class HubDiscovery {
                 @Override public void onServiceLost() {}
                 @Override public void onServiceInfoCallbackUnregistered() {}
                 @Override public void onServiceUpdated(@NonNull NsdServiceInfo resolved) {
-                    for (InetAddress a : resolved.getHostAddresses()) {
-                        if (a instanceof Inet4Address) probeAsync(a.getHostAddress(), resolved.getPort(), "mdns");
+                    try {
+                        for (InetAddress a : resolved.getHostAddresses()) {
+                            if (a instanceof Inet4Address) probeAsync(a.getHostAddress(), resolved.getPort(), "mdns");
+                        }
+                    } catch (RuntimeException e) {
+                        Log.w(TAG, "mDNS : service illisible", e); // rappel système : ne jamais laisser remonter
                     }
                 }
             };
             try {
-                manager.registerServiceInfoCallback(info, nsdExecutor, cb);
+                manager.registerServiceInfoCallback(info, NSD_CALLBACKS, cb);
                 infoCallbacks.add(cb);
             } catch (RuntimeException e) {
                 Log.w(TAG, "mDNS : résolution impossible", e);
@@ -226,8 +236,12 @@ public final class HubDiscovery {
                 manager.resolveService(info, new NsdManager.ResolveListener() {
                     @Override public void onResolveFailed(NsdServiceInfo s, int code) { nextLegacy(); }
                     @Override public void onServiceResolved(NsdServiceInfo s) {
-                        InetAddress a = s.getHost();
-                        if (a instanceof Inet4Address) probeAsync(a.getHostAddress(), s.getPort(), "mdns");
+                        try {
+                            InetAddress a = s.getHost();
+                            if (a instanceof Inet4Address) probeAsync(a.getHostAddress(), s.getPort(), "mdns");
+                        } catch (RuntimeException e) {
+                            Log.w(TAG, "mDNS : service illisible", e);
+                        }
                         nextLegacy();
                     }
                 });
