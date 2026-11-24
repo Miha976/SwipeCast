@@ -19,19 +19,18 @@
     "gecko:ext": "node scripts/build-gecko-ext.mjs"
   },
   "dependencies": {
-    "@capacitor/android": "^8.6.2",
-    "@capacitor/app": "^8.1.2",
-    "@capacitor/core": "^8.6.2",
-    "@capacitor/device": "^8.0.3",
-    "@capacitor/local-notifications": "^8.3.1",
-    "@capacitor/preferences": "^8.0.1",
-    "@capgo/capacitor-inappbrowser": "^8.27.9",
+    "@capacitor/android": "next",
+    "@capacitor/app": "next",
+    "@capacitor/core": "next",
+    "@capacitor/device": "next",
+    "@capacitor/local-notifications": "next",
+    "@capacitor/preferences": "next",
     "@swipecast/server": "*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.6.2",
+    "@capacitor/cli": "next",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^6.3.0",

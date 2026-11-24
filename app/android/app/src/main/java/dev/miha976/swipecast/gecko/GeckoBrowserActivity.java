@@ -3,7 +3,10 @@ package dev.miha976.swipecast.gecko;
 import android.content.Intent;
 import android.os.Bundle;
 import androidx.activity.OnBackPressedCallback;
+import android.widget.FrameLayout;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -20,6 +23,8 @@ public class GeckoBrowserActivity extends AppCompatActivity implements GeckoHost
 
     private GeckoView view;
     private GeckoHost host;
+    private FrameLayout root;
+    private boolean immersive;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -27,8 +32,18 @@ public class GeckoBrowserActivity extends AppCompatActivity implements GeckoHost
         host = GeckoHost.get(this);
         host.attachActivity(this);
 
+        // targetSdk 37 : affichage bord à bord imposé. La page ne doit pas passer sous les barres
+        // système, sauf en plein écran vidéo (mode immersif).
+        root = new FrameLayout(this);
         view = new GeckoView(this);
-        setContentView(view);
+        root.addView(view);
+        setContentView(root);
+        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            if (immersive) v.setPadding(0, 0, 0, 0);
+            else v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            return WindowInsetsCompat.CONSUMED;
+        });
         view.setSession(host.ensureSession());
 
         getOnBackPressedDispatcher()
@@ -64,6 +79,8 @@ public class GeckoBrowserActivity extends AppCompatActivity implements GeckoHost
 
     @Override
     public void setImmersive(boolean on) {
+        immersive = on;
+        ViewCompat.requestApplyInsets(root);
         WindowInsetsControllerCompat c = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
         if (on) {
             c.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
