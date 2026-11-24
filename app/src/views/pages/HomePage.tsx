@@ -37,8 +37,8 @@ export function HomePage({ app, state }: { app: AppViewModel; state: AppState })
         )
       )}
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
-        <section className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <section className="flex min-w-0 flex-col gap-3">
           <h2 className="flex items-center gap-2 text-lg text-ink-200">
             <Icon name="history" className="h-5 w-5" /> Récemment
           </h2>

@@ -5,7 +5,7 @@ export function StatusPill({ status, peer }: { status: SyncStatus; peer: Device 
   if (status === 'online' && peer?.online) {
     return (
       <span className="chip chip-ok">
-        <span className="h-2 w-2 rounded-full bg-ok" /> {peer.name} connecté
+        <span className="h-2 w-2 shrink-0 rounded-full bg-ok" /> <span className="truncate">{peer.name} connecté</span>
       </span>
     );
   }

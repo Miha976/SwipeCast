@@ -20,7 +20,7 @@ export function PairingPage({ services, app }: { services: Services; app: AppVie
   if (st.hub) {
     const others = appState.devices.filter((d) => d.id !== appState.self?.id);
     return (
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 [&>*]:min-w-0">
         <section className="card">
           <h2 className="mb-1 text-2xl">Appairer un téléphone</h2>
           <p className="mb-6 text-ink-400">

@@ -17,9 +17,9 @@ export function HistoryList({ items, onOpen }: { items: HistoryEntry[]; onOpen: 
     );
   }
   return (
-    <ul className="grid gap-2 lg:grid-cols-2">
+    <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2">
       {items.map((e) => (
-        <li key={e.id}>
+        <li key={e.id} className="min-w-0">
           <button
             onClick={() => onOpen(e)}
             className="group flex w-full items-center gap-4 rounded-2xl bg-white/[.03] p-3 text-left transition hover:bg-white/[.07]"
