@@ -54,7 +54,7 @@ npm install
 npm run dev:desktop        # Vite + Electron, hub sur le port 47321
 
 # Installeur Windows
-npm run dist:win           # → app/release/SwipeCast Setup x.y.z.exe
+npm run dist:win           # → app/release/SwipeCast Setup x.y.z.exe (Electron épinglé : electron-builder exige une version exacte)
 
 # Android
 npm run android            # build + cap sync + ouverture dans Android Studio
